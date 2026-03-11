@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+<meta charset="UTF-8">
+<title>GSTR1 Dashboard</title>
+<link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+<div class="container">
+
+<div class="sidebar">
+
+<h2>GST Sessions</h2>
+<div id="userList"></div>
+
+<hr>
+
+<h3>Check Session</h3>
+<input id="gstinCheck" placeholder="GSTIN">
+<button onclick="checkSession()">Check</button>
+
+<hr>
+
+<h3>OTP Login</h3>
+
+<input id="username" placeholder="Username">
+<input id="gstin" placeholder="GSTIN">
+
+<button onclick="generateOTP()">Generate OTP</button>
+
+<input id="otp" placeholder="OTP">
+<button onclick="verifyOTP()">Verify</button>
+
+</div>
+
+<div class="main">
+
+<h1>GSTR-1 Dashboard</h1>
+
+<div class="filters">
+
+<select id="gstinSelect"></select>
+
+<input id="year" value="2023">
+<input id="month" value="12">
+
+<button onclick="loadDashboard()">Load</button>
+
+</div>
+
+
+<div id="summaryCards" class="cards"></div>
+
+<div class="section">
+<h3>B2B Invoices</h3>
+<table id="b2bTable"></table>
+</div>
+
+<div class="section">
+<h3>B2CS</h3>
+<table id="b2csTable"></table>
+</div>
+
+<div class="section">
+<h3>HSN Summary</h3>
+<table id="hsnTable"></table>
+</div>
+
+<div class="section">
+<h3>NIL Supplies</h3>
+<table id="nilTable"></table>
+</div>
+
+<div class="section">
+<h3>Credit/Debit Notes</h3>
+<table id="cdnrTable"></table>
+</div>
+
+<div class="section">
+<h3>Document Issues</h3>
+<table id="docTable"></table>
+</div>
+
+</div>
+
+</div>
+
+<script src="app.js"></script>
+
+</body>
+</html>
