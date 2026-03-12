@@ -7,15 +7,22 @@ from typing import Any, Dict, Optional
 from urllib.parse import urlencode
 
 import requests
-from config import BASE_URL, API_KEY, API_SECRET, API_VERSION
-from session_storage import save_session, get_session
+
+from config import API_KEY, API_SECRET, API_VERSION, BASE_URL
+from session_storage import get_session, save_session
 
 logger = logging.getLogger(__name__)
+
 REQUEST_TIMEOUT_SECONDS = 30
 TOKEN_REFRESH_BUFFER_SECONDS = 60
+OTP_CONTEXT_TTL_SECONDS = 10 * 60
 
 _platform_access_token: Optional[str] = None
 _platform_access_token_expiry_epoch: float = 0.0
+
+# Stores the authorization token used to generate OTP per (gstin, username)
+# so that verify uses the same auth context.
+_otp_auth_context: Dict[str, Dict[str, Any]] = {}
 
 
 def _mask_gstin(gstin: str) -> str:
@@ -24,6 +31,42 @@ def _mask_gstin(gstin: str) -> str:
     if len(gstin) <= 6:
         return "***"
     return f"{gstin[:2]}***{gstin[-4:]}"
+
+
+def _normalize_gstin(gstin: str) -> str:
+    return (gstin or "").strip().upper()
+
+
+def _otp_context_key(username: str, gstin: str) -> str:
+    return f"{_normalize_gstin(gstin)}::{(username or '').strip().lower()}"
+
+
+def _save_otp_context(username: str, gstin: str, authorization_token: str) -> None:
+    if not authorization_token:
+        return
+    _otp_auth_context[_otp_context_key(username, gstin)] = {
+        "authorization": authorization_token,
+        "created_at": time.time(),
+    }
+
+
+def _get_otp_context_token(username: str, gstin: str) -> Optional[str]:
+    key = _otp_context_key(username, gstin)
+    record = _otp_auth_context.get(key)
+    if not record:
+        return None
+
+    created_at = float(record.get("created_at") or 0.0)
+    if created_at and (time.time() - created_at) > OTP_CONTEXT_TTL_SECONDS:
+        _otp_auth_context.pop(key, None)
+        return None
+
+    token = record.get("authorization")
+    return token if isinstance(token, str) and token else None
+
+
+def _clear_otp_context(username: str, gstin: str) -> None:
+    _otp_auth_context.pop(_otp_context_key(username, gstin), None)
 
 
 def _safe_json(response: requests.Response) -> Dict[str, Any]:
@@ -39,6 +82,7 @@ def _extract_message(payload: Dict[str, Any], fallback: str) -> str:
         value = payload.get(key)
         if isinstance(value, str) and value.strip():
             return value.strip()
+
     data = payload.get("data")
     if isinstance(data, dict):
         error_obj = data.get("error")
@@ -46,13 +90,18 @@ def _extract_message(payload: Dict[str, Any], fallback: str) -> str:
             error_msg = error_obj.get("message")
             if isinstance(error_msg, str) and error_msg.strip():
                 return error_msg.strip()
+
     return fallback
 
 
 def _extract_status_cd(payload: Dict[str, Any]) -> Optional[str]:
+    if "status_cd" in payload:
+        return str(payload.get("status_cd"))
+
     data = payload.get("data")
     if isinstance(data, dict) and "status_cd" in data:
         return str(data.get("status_cd"))
+
     return None
 
 
@@ -62,6 +111,11 @@ def _extract_error_code(payload: Dict[str, Any]) -> Optional[str]:
         error_obj = data.get("error")
         if isinstance(error_obj, dict) and error_obj.get("error_cd"):
             return str(error_obj["error_cd"])
+
+    error_obj = payload.get("error")
+    if isinstance(error_obj, dict) and error_obj.get("error_cd"):
+        return str(error_obj["error_cd"])
+
     return None
 
 
@@ -70,8 +124,10 @@ def _decode_jwt_expiry_epoch(token: str) -> Optional[int]:
         parts = token.split(".")
         if len(parts) < 2:
             return None
+
         payload_b64 = parts[1]
         payload_b64 += "=" * (-len(payload_b64) % 4)
+
         decoded = base64.urlsafe_b64decode(payload_b64.encode("ascii")).decode("utf-8")
         payload = json.loads(decoded)
         exp = payload.get("exp")
@@ -84,11 +140,7 @@ def _authenticate_platform(force_refresh: bool = False) -> str:
     global _platform_access_token, _platform_access_token_expiry_epoch
 
     now = time.time()
-    if (
-        not force_refresh
-        and _platform_access_token
-        and now < _platform_access_token_expiry_epoch
-    ):
+    if not force_refresh and _platform_access_token and now < _platform_access_token_expiry_epoch:
         return _platform_access_token
 
     auth_url = f"{BASE_URL}/authenticate"
@@ -118,14 +170,14 @@ def _authenticate_platform(force_refresh: bool = False) -> str:
     if expiry_epoch:
         _platform_access_token_expiry_epoch = max(now + 30, expiry_epoch - TOKEN_REFRESH_BUFFER_SECONDS)
     else:
+        # Conservative fallback if token does not expose exp.
         _platform_access_token_expiry_epoch = now + (24 * 60 * 60)
 
     _platform_access_token = token
     return token
 
 
-def _platform_headers(force_refresh: bool = False) -> Dict[str, str]:
-    token = _authenticate_platform(force_refresh=force_refresh)
+def _platform_headers_with_token(token: str) -> Dict[str, str]:
     return {
         "Authorization": token,
         "x-api-key": API_KEY,
@@ -135,38 +187,63 @@ def _platform_headers(force_refresh: bool = False) -> Dict[str, str]:
     }
 
 
-def _post_with_platform_auth(url: str, payload: Dict[str, Any]) -> requests.Response:
-    """POST with platform token. Auto-retries if AUTH4033 is returned in body (HTTP 200)."""
-    response = requests.post(url, json=payload, headers=_platform_headers(), timeout=REQUEST_TIMEOUT_SECONDS)
+def _platform_headers(force_refresh: bool = False) -> Dict[str, str]:
+    token = _authenticate_platform(force_refresh=force_refresh)
+    return _platform_headers_with_token(token)
+
+
+def _post_with_platform_auth(
+    url: str,
+    payload: Dict[str, Any],
+    *,
+    authorization_token: Optional[str] = None,
+    retry_on_auth_error: bool = True,
+) -> tuple[requests.Response, str]:
+    """
+    POST with platform token.
+    Returns (response, authorization_token_used).
+    """
+    token_used = authorization_token or _authenticate_platform()
+    response = requests.post(
+        url,
+        json=payload,
+        headers=_platform_headers_with_token(token_used),
+        timeout=REQUEST_TIMEOUT_SECONDS,
+    )
 
     try:
         data = response.json()
     except Exception:
-        return response
+        return response, token_used
 
     error_cd = data.get("data", {}).get("error", {}).get("error_cd")
 
-    # AUTH4033 can come back as HTTP 200 — handle it
-    if error_cd == "AUTH4033" or response.status_code in (401, 403):
+    # Retry for auth errors only when token is not explicitly pinned.
+    if retry_on_auth_error and not authorization_token and (error_cd == "AUTH4033" or response.status_code in (401, 403)):
         logger.warning("Platform token expired (error_cd=%s). Force re-authenticating...", error_cd)
+        token_used = _authenticate_platform(force_refresh=True)
         response = requests.post(
-            url, json=payload,
-            headers=_platform_headers(force_refresh=True),
+            url,
+            json=payload,
+            headers=_platform_headers_with_token(token_used),
             timeout=REQUEST_TIMEOUT_SECONDS,
         )
 
-    return response
+    return response, token_used
 
 
 def generate_otp(username: str, gstin: str) -> Dict[str, Any]:
+    username = (username or "").strip()
+    gstin = _normalize_gstin(gstin)
     masked_gstin = _mask_gstin(gstin)
+
     logger.info("otp_generate_started gstin=%s username=%s", masked_gstin, username)
 
     url = f"{BASE_URL}/gst/compliance/tax-payer/otp"
     payload = {"username": username, "gstin": gstin}
 
     try:
-        response = _post_with_platform_auth(url, payload)
+        response, authorization_token_used = _post_with_platform_auth(url, payload)
     except (requests.RequestException, RuntimeError) as exc:
         logger.exception("otp_generate_failed gstin=%s error=%s", masked_gstin, exc)
         return {
@@ -180,14 +257,21 @@ def generate_otp(username: str, gstin: str) -> Dict[str, Any]:
     status_cd = _extract_status_cd(response_payload)
     success = (200 <= response.status_code < 300) and (status_cd in (None, "1"))
     error_code = _extract_error_code(response_payload)
-    fallback_message = (
-        "OTP request sent. Check your registered mobile or email." if success else "OTP request failed."
-    )
+
+    fallback_message = "OTP request sent. Check your registered mobile or email." if success else "OTP request failed."
     message = _extract_message(response_payload, fallback_message)
+
+    if success:
+        _save_otp_context(username, gstin, authorization_token_used)
+    else:
+        _clear_otp_context(username, gstin)
 
     logger.info(
         "otp_generate_completed gstin=%s status_code=%s status_cd=%s success=%s",
-        masked_gstin, response.status_code, status_cd, success,
+        masked_gstin,
+        response.status_code,
+        status_cd,
+        success,
     )
 
     return {
@@ -202,15 +286,33 @@ def generate_otp(username: str, gstin: str) -> Dict[str, Any]:
 
 
 def verify_otp(username: str, gstin: str, otp: str) -> Dict[str, Any]:
+    username = (username or "").strip()
+    gstin = _normalize_gstin(gstin)
+    otp = (otp or "").strip()
     masked_gstin = _mask_gstin(gstin)
+
     logger.info("otp_verify_started gstin=%s username=%s", masked_gstin, username)
 
-    # OTP is a QUERY PARAM per official docs
+    # OTP is a query parameter as per the current Sandbox API docs.
     url = f"{BASE_URL}/gst/compliance/tax-payer/otp/verify?{urlencode({'otp': otp})}"
     payload = {"username": username, "gstin": gstin}
 
+    otp_context_token = _get_otp_context_token(username, gstin)
+    if otp_context_token:
+        logger.info("otp_verify_using_cached_context gstin=%s", masked_gstin)
+    else:
+        logger.warning(
+            "otp_verify_context_missing gstin=%s; using current platform token",
+            masked_gstin,
+        )
+
     try:
-        response = _post_with_platform_auth(url, payload)
+        response, _ = _post_with_platform_auth(
+            url,
+            payload,
+            authorization_token=otp_context_token,
+            retry_on_auth_error=otp_context_token is None,
+        )
     except (requests.RequestException, RuntimeError) as exc:
         logger.exception("otp_verify_failed gstin=%s error=%s", masked_gstin, exc)
         return {
@@ -219,6 +321,9 @@ def verify_otp(username: str, gstin: str, otp: str) -> Dict[str, Any]:
             "message": "Unable to send OTP verification request to GST API.",
             "error": str(exc),
         }
+    finally:
+        # OTP verification is a one-time flow; require a fresh OTP generate for a new attempt.
+        _clear_otp_context(username, gstin)
 
     response_payload = _safe_json(response)
     data = response_payload.get("data", {})
@@ -242,12 +347,18 @@ def verify_otp(username: str, gstin: str, otp: str) -> Dict[str, Any]:
         fallback_message = "OTP verified and GST session saved."
     elif api_success:
         fallback_message = "OTP verified, but GST access token was not found in response."
+    elif error_code == "AUTH4033":
+        fallback_message = "Invalid session. Generate OTP again and verify with the latest OTP."
     else:
         fallback_message = "OTP verification failed."
 
     logger.info(
         "otp_verify_completed gstin=%s status_code=%s status_cd=%s success=%s session_saved=%s",
-        masked_gstin, response.status_code, status_cd, success, session_saved,
+        masked_gstin,
+        response.status_code,
+        status_cd,
+        success,
+        session_saved,
     )
 
     return {
@@ -266,9 +377,11 @@ def verify_otp(username: str, gstin: str, otp: str) -> Dict[str, Any]:
 def refresh_session(gstin: str) -> Dict[str, Any]:
     """
     Extends taxpayer session by 6 hours without re-OTP.
-    Uses the TAXPAYER access_token (not platform token) in Authorization.
+    Uses the taxpayer access_token in Authorization.
     """
+    gstin = _normalize_gstin(gstin)
     masked_gstin = _mask_gstin(gstin)
+
     logger.info("session_refresh_started gstin=%s", masked_gstin)
 
     session = get_session(gstin)
@@ -280,8 +393,6 @@ def refresh_session(gstin: str) -> Dict[str, Any]:
         }
 
     url = f"{BASE_URL}/gst/compliance/tax-payer/session/refresh"
-
-    # IMPORTANT: Authorization here is the TAXPAYER token, NOT the platform token
     headers = {
         "Authorization": session["access_token"],
         "x-api-key": API_KEY,
@@ -312,7 +423,7 @@ def refresh_session(gstin: str) -> Dict[str, Any]:
     session_saved = False
 
     if api_success:
-        # Some refresh responses only extend expiry without a new token — keep existing
+        # Some refresh responses extend expiry without a new token.
         token_to_save = new_token or session.get("access_token")
         if token_to_save:
             save_session(
@@ -337,7 +448,10 @@ def refresh_session(gstin: str) -> Dict[str, Any]:
 
     logger.info(
         "session_refresh_completed gstin=%s status_code=%s success=%s session_saved=%s",
-        masked_gstin, response.status_code, success, session_saved,
+        masked_gstin,
+        response.status_code,
+        success,
+        session_saved,
     )
 
     return {

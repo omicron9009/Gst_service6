@@ -10,6 +10,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from routers.auth_router import router as auth_router
 from routers.gst_r1_router import router as gstr1_router
 from routers.gstr_2A_router import router as gstr2a_router
+from routers.gstr_2B_router import router as gstr2b_router
+from routers.gstr_3B_router import router as gstr3b_router
+from routers.gstr_9_router import router as gstr9_router
+from routers.ledger_router import router as ledger_router
+from routers.gst_return_status_router import router as gst_return_status_router
 from services.session_refresh_manager import start_scheduler, stop_scheduler
 
 logging.basicConfig(
@@ -38,6 +43,11 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(gstr1_router)
 app.include_router(gstr2a_router)
+app.include_router(gstr2b_router)
+app.include_router(gstr3b_router)
+app.include_router(gstr9_router)
+app.include_router(ledger_router)
+app.include_router(gst_return_status_router)
 
 
 @app.get("/health")

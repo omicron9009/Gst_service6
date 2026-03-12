@@ -6,17 +6,32 @@
                     # cdnra
                     # cdnura
                     # expa
+                    # txp 
+                    # txpa 
+                    # ecom 
+                    # ecoma 
+                    # supeco
+                    # supecoa
 #------------------ -------------------------
 
-#done : 
+# funtions in gstr 1 service : 
+                # at 
+                # b2b 
+                # gstr1 summary 
+                # b2csa
+                # b2cs
+                # cdnr
+                # issued docs
+                # hsn summary
+                # nill rated 
+                # b2cl 
+                # cdnur 
+                # exp
 
 
-# to do -------------
-
-
-
-# gst return status-------
-# return status 
+# ---------to do -------------
+#       gst return status
+#       return status 
 
 
 

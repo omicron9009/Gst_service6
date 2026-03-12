@@ -7,10 +7,16 @@
 #  impgsez 
 #  tcs
 #  tds
-#  
+ 
 # -------------------------------------
 
-
+# functions available in gstr 2a 
+#  b2b 
+#  b2ba 
+#  cdn 
+#  cdna
+#  2a doc
+#  isd 
 
 
 import requests
