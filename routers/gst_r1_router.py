@@ -155,3 +155,20 @@ def gstr1_exp(gstin: str, year: str, month: str):
     if not result.get("success"):
         raise HTTPException(status_code=400, detail=result)
     return result
+
+
+@router.get("/gstr1/{gstin}/{year}/{month}/txp")
+def gstr1_txp(
+    gstin: str,
+    year:  str,
+    month: str,
+    counterparty_gstin: Optional[str] = Query(None, description="Filter by counterparty GSTIN"),
+    action_required:    Optional[str] = Query(None, description="Y = action needed, N = already accepted/uploaded"),
+    from_date:          Optional[str] = Query(None, alias="from", description="From date DD/MM/YYYY"),
+):
+    result = get_gstr1_txp(gstin, year, month, counterparty_gstin, action_required, from_date)
+
+    if not result.get("success"):
+        raise HTTPException(status_code=400, detail=result)
+
+    return result

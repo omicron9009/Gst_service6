@@ -1,0 +1,1204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Industry-Grade DB Schema — GST Compliance Platform</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+
+:root {
+  --bg:      #05070d;
+  --surface: #0d1117;
+  --card:    #111822;
+  --border:  #1c2333;
+  --border2: #263044;
+  --text:    #cdd9e5;
+  --muted:   #545d6b;
+  --dim:     #8b949e;
+
+  --g:  #3fb950;   /* green */
+  --b:  #58a6ff;   /* blue */
+  --y:  #d29922;   /* yellow */
+  --r:  #f85149;   /* red */
+  --p:  #bc8cff;   /* purple */
+  --c:  #39d3f5;   /* cyan */
+  --o:  #f0883e;   /* orange */
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* ── LAYOUT ── */
+.shell {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  min-height: 100vh;
+}
+
+/* ── SIDEBAR ── */
+.sidebar {
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  padding: 28px 0;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+  flex-shrink: 0;
+}
+.sidebar-logo {
+  padding: 0 20px 24px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 16px;
+}
+.sidebar-logo .title {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.75rem;
+  color: var(--g);
+  letter-spacing: 1px;
+  display: block;
+}
+.sidebar-logo .sub {
+  font-size: 0.7rem;
+  color: var(--muted);
+  margin-top: 2px;
+}
+.nav-group { margin-bottom: 4px; }
+.nav-label {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.6rem;
+  color: var(--muted);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  padding: 12px 20px 4px;
+  display: block;
+}
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 20px;
+  font-size: 0.8rem;
+  color: var(--dim);
+  cursor: pointer;
+  border-left: 2px solid transparent;
+  transition: all 0.15s;
+  text-decoration: none;
+}
+.nav-item:hover, .nav-item.active {
+  color: var(--text);
+  border-left-color: var(--g);
+  background: rgba(63,185,80,0.05);
+}
+.nav-item .dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* ── MAIN ── */
+main {
+  padding: 48px 56px;
+  max-width: 1100px;
+}
+
+section { margin-bottom: 80px; }
+
+.section-eyebrow {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.65rem;
+  color: var(--g);
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+.section-title {
+  font-size: 1.6rem;
+  font-weight: 600;
+  color: #fff;
+  margin-bottom: 12px;
+  letter-spacing: -0.3px;
+}
+.section-desc {
+  color: var(--dim);
+  font-size: 0.9rem;
+  max-width: 680px;
+  line-height: 1.75;
+  margin-bottom: 36px;
+}
+
+/* ── CALLOUT ── */
+.callout {
+  background: var(--card);
+  border: 1px solid var(--border2);
+  border-left: 3px solid var(--g);
+  border-radius: 8px;
+  padding: 18px 22px;
+  margin-bottom: 28px;
+  font-size: 0.875rem;
+  color: var(--text);
+  line-height: 1.7;
+}
+.callout.blue  { border-left-color: var(--b); }
+.callout.amber { border-left-color: var(--y); }
+.callout.red   { border-left-color: var(--r); }
+.callout.purple { border-left-color: var(--p); }
+.callout strong { color: #fff; }
+.callout code {
+  background: rgba(255,255,255,0.06);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.8rem;
+  color: var(--c);
+}
+
+/* ── CODE BLOCK ── */
+.code-block {
+  background: #010409;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 24px;
+}
+.code-header {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 10px 18px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.7rem;
+  color: var(--dim);
+}
+.code-header .lang {
+  background: rgba(255,255,255,0.05);
+  padding: 2px 8px;
+  border-radius: 4px;
+  color: var(--y);
+}
+.code-body {
+  padding: 20px 22px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.78rem;
+  line-height: 2;
+  overflow-x: auto;
+  white-space: pre;
+}
+.kw  { color: var(--r); }    /* keywords: CREATE, SELECT... */
+.ty  { color: var(--b); }    /* types: TEXT, JSONB, INTEGER... */
+.cm  { color: var(--muted); }/* comments */
+.cn  { color: var(--g); }    /* column names */
+.st  { color: var(--y); }    /* strings / values */
+.fn  { color: var(--p); }    /* function names */
+.op  { color: var(--c); }    /* operators, specials */
+
+/* ── CARDS ── */
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+  margin-bottom: 28px;
+}
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 22px;
+  position: relative;
+  overflow: hidden;
+}
+.card::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+}
+.card.g::after { background: linear-gradient(90deg, var(--g), transparent); }
+.card.b::after { background: linear-gradient(90deg, var(--b), transparent); }
+.card.y::after { background: linear-gradient(90deg, var(--y), transparent); }
+.card.r::after { background: linear-gradient(90deg, var(--r), transparent); }
+.card.p::after { background: linear-gradient(90deg, var(--p), transparent); }
+.card.c::after { background: linear-gradient(90deg, var(--c), transparent); }
+.card.o::after { background: linear-gradient(90deg, var(--o), transparent); }
+
+.card-icon { font-size: 1.4rem; margin-bottom: 12px; }
+.card h3 {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #fff;
+  margin-bottom: 6px;
+}
+.card p {
+  font-size: 0.8rem;
+  color: var(--dim);
+  line-height: 1.65;
+}
+.card .tag {
+  display: inline-block;
+  margin-top: 10px;
+  padding: 2px 8px;
+  border-radius: 99px;
+  font-size: 0.65rem;
+  font-family: 'IBM Plex Mono', monospace;
+  border: 1px solid currentColor;
+  opacity: 0.7;
+}
+.card.g .tag { color: var(--g); }
+.card.b .tag { color: var(--b); }
+.card.y .tag { color: var(--y); }
+.card.r .tag { color: var(--r); }
+.card.p .tag { color: var(--p); }
+.card.c .tag { color: var(--c); }
+.card.o .tag { color: var(--o); }
+
+/* ── COMPARISON TABLE ── */
+.compare-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 28px;
+}
+.compare-table th {
+  background: var(--surface);
+  padding: 11px 16px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.65rem;
+  color: var(--muted);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  text-align: left;
+  border-bottom: 1px solid var(--border2);
+}
+.compare-table td {
+  padding: 12px 16px;
+  font-size: 0.82rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.compare-table tr:hover td { background: rgba(255,255,255,0.015); }
+.compare-table tr:last-child td { border-bottom: none; }
+.compare-table .feature { color: var(--text); font-weight: 500; }
+.compare-table .basic   { color: var(--muted); }
+.compare-table .industry { color: var(--g); }
+.compare-table .why { color: var(--dim); font-size: 0.76rem; line-height: 1.6; }
+.tick { color: var(--g); }
+.cross { color: var(--r); }
+
+/* ── PATTERN BLOCK ── */
+.pattern {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 20px;
+}
+.pattern-header {
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.pattern-header h4 {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #fff;
+}
+.pattern-header .badge {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.6rem;
+  padding: 3px 8px;
+  border-radius: 99px;
+  border: 1px solid var(--border2);
+  color: var(--dim);
+}
+.pattern-body { padding: 18px 20px; }
+.pattern-body p {
+  font-size: 0.83rem;
+  color: var(--dim);
+  margin-bottom: 12px;
+  line-height: 1.7;
+}
+
+/* ── SCHEMA TIER ── */
+.tier {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 28px;
+  background: var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.tier-box {
+  flex: 1;
+  background: var(--card);
+  padding: 20px 16px;
+  text-align: center;
+}
+.tier-box .t-label {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.65rem;
+  color: var(--muted);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+.tier-box .t-name {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #fff;
+  margin-bottom: 6px;
+}
+.tier-box .t-items {
+  font-size: 0.72rem;
+  color: var(--dim);
+  line-height: 1.8;
+}
+
+/* ── FLOW ── */
+.flow-row {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  margin-bottom: 20px;
+  overflow-x: auto;
+}
+.flow-node {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  min-width: 130px;
+  text-align: center;
+  flex-shrink: 0;
+}
+.flow-node .f-icon { font-size: 1.2rem; }
+.flow-node .f-name {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.7rem;
+  color: var(--c);
+  display: block;
+  margin-top: 4px;
+}
+.flow-node .f-sub {
+  font-size: 0.68rem;
+  color: var(--muted);
+  margin-top: 2px;
+}
+.flow-arrow {
+  color: var(--border2);
+  font-size: 1.2rem;
+  padding: 0 8px;
+  flex-shrink: 0;
+}
+
+/* ── DIVIDER ── */
+hr.section-sep {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 60px 0;
+}
+
+/* ── CHECKLIST ── */
+.checklist { list-style: none; margin-bottom: 24px; }
+.checklist li {
+  display: flex;
+  gap: 10px;
+  padding: 7px 0;
+  font-size: 0.85rem;
+  color: var(--dim);
+  border-bottom: 1px solid var(--border);
+}
+.checklist li:last-child { border-bottom: none; }
+.checklist li .c-icon { flex-shrink: 0; margin-top: 1px; }
+.checklist li strong { color: var(--text); }
+
+/* ── INLINE BADGE ── */
+.ib {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 4px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+.ib.g { background: rgba(63,185,80,0.12); color: var(--g); }
+.ib.b { background: rgba(88,166,255,0.12); color: var(--b); }
+.ib.y { background: rgba(210,153,34,0.12); color: var(--y); }
+.ib.r { background: rgba(248,81,73,0.12);  color: var(--r); }
+.ib.p { background: rgba(188,140,255,0.12);color: var(--p); }
+.ib.c { background: rgba(57,211,245,0.12); color: var(--c); }
+
+/* ── TWO COL ── */
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 28px; }
+
+.mono { font-family: 'IBM Plex Mono', monospace; }
+</style>
+</head>
+<body>
+
+<div class="shell">
+
+<!-- ═══ SIDEBAR ═══ -->
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <span class="title">GST_SCHEMA.v2</span>
+    <span class="sub">Industry-Grade Architecture</span>
+  </div>
+  <nav>
+    <div class="nav-group">
+      <span class="nav-label">Foundation</span>
+      <a class="nav-item active" href="#s1"><span class="dot" style="background:var(--g)"></span>What changes & why</a>
+      <a class="nav-item" href="#s2"><span class="dot" style="background:var(--b)"></span>The 3-layer model</a>
+    </div>
+    <div class="nav-group">
+      <span class="nav-label">Core Patterns</span>
+      <a class="nav-item" href="#s3"><span class="dot" style="background:var(--y)"></span>Audit trail (immutability)</a>
+      <a class="nav-item" href="#s4"><span class="dot" style="background:var(--p)"></span>Schema-per-service</a>
+      <a class="nav-item" href="#s5"><span class="dot" style="background:var(--c)"></span>Event sourcing lite</a>
+      <a class="nav-item" href="#s6"><span class="dot" style="background:var(--o)"></span>Idempotency</a>
+    </div>
+    <div class="nav-group">
+      <span class="nav-label">Implementation</span>
+      <a class="nav-item" href="#s7"><span class="dot" style="background:var(--g)"></span>Universal table template</a>
+      <a class="nav-item" href="#s8"><span class="dot" style="background:var(--b)"></span>Migration strategy</a>
+      <a class="nav-item" href="#s9"><span class="dot" style="background:var(--r)"></span>What NOT to do</a>
+    </div>
+    <div class="nav-group">
+      <span class="nav-label">Production</span>
+      <a class="nav-item" href="#s10"><span class="dot" style="background:var(--p)"></span>Full SQL template</a>
+      <a class="nav-item" href="#s11"><span class="dot" style="background:var(--c)"></span>Python layer pattern</a>
+    </div>
+  </nav>
+</aside>
+
+<!-- ═══ MAIN ═══ -->
+<main>
+
+<!-- ──────────── S1: WHAT CHANGES ──────────── -->
+<section id="s1">
+  <div class="section-eyebrow">Foundation · 01</div>
+  <h1 class="section-title">What changes at industry grade — and why</h1>
+  <p class="section-desc">Your previous schema was solid for getting started. Industry grade means it can survive audits, developer changes, GST API responses changing shape, and your team growing from 1 to 10 people — without ever losing data or breaking existing queries.</p>
+
+  <div class="callout">
+    <strong>The single biggest shift:</strong> Stop thinking about tables as "storage". Start thinking about them as <strong>immutable event logs</strong>. In GST compliance, every API call is an event. That event happened at a specific time. You never want to lose it — not even if you fetch "fresher" data the next day. Financial regulators, CA firms, and your own debugging will thank you for this.
+  </div>
+
+  <table class="compare-table">
+    <thead>
+      <tr>
+        <th>Design concern</th>
+        <th>Basic approach</th>
+        <th>Industry-grade approach</th>
+        <th>Why it matters</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="feature">Storing data</td>
+        <td class="basic">UPSERT — overwrite old with new</td>
+        <td class="industry">✦ Append-only log + latest-view</td>
+        <td class="why">If GST portal shows stale data and you re-fetched, you've lost the original. Disputes, audits, reconciliation need history.</td>
+      </tr>
+      <tr>
+        <td class="feature">Schema changes</td>
+        <td class="basic">ALTER TABLE, hope nothing breaks</td>
+        <td class="industry">✦ Versioned migrations (Alembic/Flyway)</td>
+        <td class="why">Every DB change is tracked, reversible, and deployed consistently across dev/staging/prod.</td>
+      </tr>
+      <tr>
+        <td class="feature">Table ownership</td>
+        <td class="basic">One DB, tables named by service</td>
+        <td class="industry">✦ One PostgreSQL schema per service</td>
+        <td class="why">Same DB cluster, total logical isolation. <code>gstr1.b2b</code> vs <code>gstr3b.details</code>. Cross-service queries still possible in SQL.</td>
+      </tr>
+      <tr>
+        <td class="feature">Raw data</td>
+        <td class="basic">JSONB column on main table</td>
+        <td class="industry">✦ Dedicated <code>raw_events</code> table, never touched after insert</td>
+        <td class="why">Separation of concerns. Parsed data can be re-generated from raw. Raw is your source of truth.</td>
+      </tr>
+      <tr>
+        <td class="feature">Idempotency</td>
+        <td class="basic">Assume API won't be called twice</td>
+        <td class="industry">✦ <code>request_id</code> / <code>idempotency_key</code> column</td>
+        <td class="why">Network retries, background jobs, and human mistakes will cause duplicate calls. Your DB must handle this without exploding.</td>
+      </tr>
+      <tr>
+        <td class="feature">Error tracking</td>
+        <td class="basic">Return dict with success=False</td>
+        <td class="industry">✦ <code>api_calls</code> log table — every call, success or fail</td>
+        <td class="why">You can replay failed fetches, audit API usage, and diagnose intermittent GST API errors.</td>
+      </tr>
+      <tr>
+        <td class="feature">Computed totals</td>
+        <td class="basic">Parse JSONB at query time</td>
+        <td class="industry">✦ Materialized view or generated columns</td>
+        <td class="why">Fast reporting queries on <code>SUM(igst_total)</code> without unpacking JSON every time.</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ──────────── S2: 3-LAYER MODEL ──────────── -->
+<section id="s2">
+  <div class="section-eyebrow">Foundation · 02</div>
+  <h1 class="section-title">The 3-layer data model</h1>
+  <p class="section-desc">Every GST service follows this exact three-layer structure. The layers are independent — you can query or rebuild any one of them without touching the others.</p>
+
+  <div class="tier">
+    <div class="tier-box">
+      <div class="t-label">Layer 1</div>
+      <div class="t-name" style="color:var(--r)">🪨 Raw Events</div>
+      <div class="t-items">
+        Append-only<br>
+        Never updated<br>
+        One row per API call<br>
+        <span style="color:var(--r)">Source of truth</span>
+      </div>
+    </div>
+    <div class="tier-box">
+      <div class="t-label">Layer 2</div>
+      <div class="t-name" style="color:var(--y)">⚙️ Parsed State</div>
+      <div class="t-items">
+        One row per (gstin, period)<br>
+        UPSERTed each fetch<br>
+        Structured columns<br>
+        <span style="color:var(--y)">Current best known state</span>
+      </div>
+    </div>
+    <div class="tier-box">
+      <div class="t-label">Layer 3</div>
+      <div class="t-name" style="color:var(--g)">📊 Analytics View</div>
+      <div class="t-items">
+        Materialized views<br>
+        Aggregated totals<br>
+        Cross-service joins<br>
+        <span style="color:var(--g)">Fast reporting</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout blue">
+    <strong>Think of it like Git.</strong> Layer 1 is your full commit history — never delete it. Layer 2 is <code>HEAD</code> — the latest state. Layer 3 is your dashboard — computed from HEAD for fast access. When the GST API gives you new data, you append to Layer 1 and update Layer 2. Layer 3 refreshes automatically.
+  </div>
+
+  <div class="flow-row">
+    <div class="flow-node">
+      <div class="f-icon">🌐</div>
+      <span class="f-name">GST API</span>
+      <div class="f-sub">raw JSON response</div>
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-node">
+      <div class="f-icon">📥</div>
+      <span class="f-name">raw_events</span>
+      <div class="f-sub">INSERT, never update</div>
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-node">
+      <div class="f-icon">⚙️</div>
+      <span class="f-name">parser</span>
+      <div class="f-sub">Python transform</div>
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-node">
+      <div class="f-icon">💾</div>
+      <span class="f-name">b2b (state)</span>
+      <div class="f-sub">UPSERT latest</div>
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-node">
+      <div class="f-icon">📊</div>
+      <span class="f-name">mv_totals</span>
+      <div class="f-sub">REFRESH MATERIALIZED</div>
+    </div>
+  </div>
+</section>
+
+<!-- ──────────── S3: AUDIT TRAIL ──────────── -->
+<section id="s3">
+  <div class="section-eyebrow">Core Pattern · 03</div>
+  <h1 class="section-title">Audit trail — immutability as a first-class citizen</h1>
+  <p class="section-desc">GST compliance is a legal domain. Data you fetched on March 1st might be different from the same endpoint on March 15th (amendments, revisions). You must be able to show: "On this date, this is what the GST portal returned."</p>
+
+  <div class="code-block">
+    <div class="code-header"><span class="lang">SQL</span> gstr1/raw_events — one insert per API call, zero updates ever</div>
+    <div class="code-body"><span class="kw">CREATE TABLE</span> gstr1.raw_events (
+    <span class="cm">-- Identity</span>
+    <span class="cn">id</span>             <span class="ty">BIGSERIAL</span>     <span class="kw">PRIMARY KEY</span>,
+    <span class="cn">idempotency_key</span> <span class="ty">TEXT</span>          <span class="kw">UNIQUE NOT NULL</span>,  <span class="cm">-- prevents duplicate inserts</span>
+
+    <span class="cm">-- What was fetched</span>
+    <span class="cn">gstin</span>          <span class="ty">TEXT</span>          <span class="kw">NOT NULL</span>,
+    <span class="cn">endpoint</span>       <span class="ty">TEXT</span>          <span class="kw">NOT NULL</span>,         <span class="cm">-- 'b2b', 'b2cs', 'cdnr'...</span>
+    <span class="cn">year</span>           <span class="ty">TEXT</span>          <span class="kw">NOT NULL</span>,
+    <span class="cn">month</span>          <span class="ty">TEXT</span>          <span class="kw">NOT NULL</span>,
+
+    <span class="cm">-- The API response — frozen forever</span>
+    <span class="cn">http_status</span>    <span class="ty">INTEGER</span>,
+    <span class="cn">gst_status_cd</span>  <span class="ty">TEXT</span>,                             <span class="cm">-- '0'=error, '1'=success</span>
+    <span class="cn">payload</span>        <span class="ty">JSONB</span>         <span class="kw">NOT NULL</span>,
+
+    <span class="cm">-- When & how</span>
+    <span class="cn">fetched_at</span>     <span class="ty">TIMESTAMPTZ</span>   <span class="kw">NOT NULL DEFAULT NOW()</span>,
+    <span class="cn">fetch_duration_ms</span> <span class="ty">INTEGER</span>,                         <span class="cm">-- API latency tracking</span>
+    <span class="cn">triggered_by</span>   <span class="ty">TEXT</span>                               <span class="cm">-- 'auto_refresh', 'manual', 'api_request'</span>
+);
+
+<span class="cm">-- Fast lookups: "all b2b fetches for this GSTIN in March"</span>
+<span class="kw">CREATE INDEX</span> ON gstr1.raw_events (gstin, endpoint, year, month, fetched_at <span class="kw">DESC</span>);
+</div>
+  </div>
+
+  <div class="callout amber">
+    <strong>The idempotency_key is critical.</strong> Build it as: <code>f"{gstin}:{endpoint}:{year}:{month}:{timestamp_rounded_to_minute}"</code>. If your background job retries due to a network blip, the second INSERT will silently fail (ON CONFLICT DO NOTHING) — no duplicates, no errors, no data corruption.
+  </div>
+</section>
+
+<!-- ──────────── S4: SCHEMA-PER-SERVICE ──────────── -->
+<section id="s4">
+  <div class="section-eyebrow">Core Pattern · 04</div>
+  <h1 class="section-title">Schema-per-service — one PostgreSQL, total isolation</h1>
+  <p class="section-desc">Instead of separate databases (7 connection strings, 7 backup configs, 7 permission setups), use one PostgreSQL cluster with separate <strong>schemas</strong>. This is the industry standard used by every serious fintech at scale.</p>
+
+  <div class="two-col">
+    <div>
+      <div class="callout red">
+        <strong>❌ Multiple databases</strong><br>
+        7 connection strings. No SQL joins across services. Complex backups. Hard to manage permissions. Overkill for this problem size.
+      </div>
+    </div>
+    <div>
+      <div class="callout" style="border-left-color: var(--g)">
+        <strong>✅ One DB, multiple schemas</strong><br>
+        1 connection string. SQL joins across services when needed. One backup. One permission model. Isolated ownership per service.
+      </div>
+    </div>
+  </div>
+
+  <div class="code-block">
+    <div class="code-header"><span class="lang">SQL</span> Schema layout — one CREATE SCHEMA per service</div>
+    <div class="code-body"><span class="cm">-- One PostgreSQL database: gst_platform</span>
+<span class="cm">-- One schema per service. Total logical isolation.</span>
+
+<span class="kw">CREATE SCHEMA</span> core;     <span class="cm">-- sessions, taxpayers, api_calls log</span>
+<span class="kw">CREATE SCHEMA</span> gstr1;    <span class="cm">-- all GSTR-1 tables</span>
+<span class="kw">CREATE SCHEMA</span> gstr2a;   <span class="cm">-- all GSTR-2A tables</span>
+<span class="kw">CREATE SCHEMA</span> gstr2b;   <span class="cm">-- all GSTR-2B tables</span>
+<span class="kw">CREATE SCHEMA</span> gstr3b;   <span class="cm">-- all GSTR-3B tables</span>
+<span class="kw">CREATE SCHEMA</span> gstr9;    <span class="cm">-- all GSTR-9 tables</span>
+<span class="kw">CREATE SCHEMA</span> ledger;   <span class="cm">-- all ledger tables</span>
+<span class="kw">CREATE SCHEMA</span> analytics;<span class="cm">-- materialized views only</span>
+
+<span class="cm">-- Tables are addressed as: schema.table</span>
+<span class="cm">-- gstr1.b2b    → GSTR-1 B2B state table</span>
+<span class="cm">-- gstr1.raw_events  → GSTR-1 raw API log</span>
+<span class="cm">-- gstr3b.details    → 3B state table</span>
+
+<span class="cm">-- Cross-service query (still pure SQL!)</span>
+<span class="kw">SELECT</span>
+    g1.total_igst    <span class="kw">AS</span> gstr1_igst,
+    g3.igst_payable  <span class="kw">AS</span> gstr3b_igst
+<span class="kw">FROM</span>  gstr1.b2b  g1
+<span class="kw">JOIN</span>  gstr3b.details g3
+  <span class="kw">ON</span>  g1.gstin = g3.gstin
+ <span class="kw">AND</span>  g1.year  = g3.year
+ <span class="kw">AND</span>  g1.month = g3.month
+<span class="kw">WHERE</span> g1.gstin = <span class="st">'27AABCU9603R1ZX'</span>;
+</div>
+  </div>
+</section>
+
+<!-- ──────────── S5: EVENT SOURCING LITE ──────────── -->
+<section id="s5">
+  <div class="section-eyebrow">Core Pattern · 05</div>
+  <h1 class="section-title">Event sourcing lite — the fetch log</h1>
+  <p class="section-desc">Every time any service function is called, one row goes into <code>core.api_calls</code>. This is your system's heartbeat. It tells you: what was fetched, when, by whom, how fast, and whether it succeeded.</p>
+
+  <div class="code-block">
+    <div class="code-header"><span class="lang">SQL</span> core.api_calls — the system's audit heartbeat</div>
+    <div class="code-body"><span class="kw">CREATE TABLE</span> core.api_calls (
+    <span class="cn">id</span>             <span class="ty">BIGSERIAL</span>      <span class="kw">PRIMARY KEY</span>,
+
+    <span class="cm">-- Who / what / when</span>
+    <span class="cn">gstin</span>          <span class="ty">TEXT</span>           <span class="kw">NOT NULL</span>,
+    <span class="cn">service</span>        <span class="ty">TEXT</span>           <span class="kw">NOT NULL</span>,  <span class="cm">-- 'gstr1', 'gstr3b', 'ledger'</span>
+    <span class="cn">function_name</span>  <span class="ty">TEXT</span>           <span class="kw">NOT NULL</span>,  <span class="cm">-- 'get_gstr1_b2b', 'get_gstr3b_details'</span>
+    <span class="cn">year</span>           <span class="ty">TEXT</span>,
+    <span class="cn">month</span>          <span class="ty">TEXT</span>,
+
+    <span class="cm">-- Result</span>
+    <span class="cn">success</span>        <span class="ty">BOOLEAN</span>        <span class="kw">NOT NULL</span>,
+    <span class="cn">http_status</span>    <span class="ty">INTEGER</span>,
+    <span class="cn">gst_status_cd</span>  <span class="ty">TEXT</span>,
+    <span class="cn">error_code</span>     <span class="ty">TEXT</span>,
+    <span class="cn">error_message</span>  <span class="ty">TEXT</span>,
+
+    <span class="cm">-- Performance</span>
+    <span class="cn">duration_ms</span>    <span class="ty">INTEGER</span>,
+    <span class="cn">called_at</span>      <span class="ty">TIMESTAMPTZ</span>    <span class="kw">NOT NULL DEFAULT NOW()</span>,
+    <span class="cn">triggered_by</span>   <span class="ty">TEXT</span>           <span class="cm">-- 'scheduler', 'webhook', 'manual'</span>
+);
+
+<span class="cm">-- Useful queries this enables:</span>
+<span class="cm">-- "Show me all failed gstr1 fetches for this GSTIN this week"</span>
+<span class="cm">-- "What's the average GST API response time?"</span>
+<span class="cm">-- "Which GSTINs haven't been refreshed in 6 hours?"</span>
+<span class="kw">CREATE INDEX</span> ON core.api_calls (gstin, called_at <span class="kw">DESC</span>);
+<span class="kw">CREATE INDEX</span> ON core.api_calls (success, called_at <span class="kw">DESC</span>) <span class="kw">WHERE NOT</span> success;
+</div>
+  </div>
+</section>
+
+<!-- ──────────── S6: IDEMPOTENCY ──────────── -->
+<section id="s6">
+  <div class="section-eyebrow">Core Pattern · 06</div>
+  <h1 class="section-title">Idempotency — calling the same function twice is safe</h1>
+  <p class="section-desc">Your <code>session_refresh_manager</code> runs on a schedule. Users can trigger manual fetches. The GST API can be slow and cause retries. Without idempotency, you get duplicate rows. With it, the second call is a no-op.</p>
+
+  <div class="code-block">
+    <div class="code-header"><span class="lang">SQL + Python</span> Idempotent upsert pattern for state tables</div>
+    <div class="code-body"><span class="cm">-- State table (Layer 2): one row per (gstin, year, month), always current</span>
+<span class="kw">INSERT INTO</span> gstr1.b2b (
+    gstin, year, month,
+    records, invoice_count, total_taxable, total_igst, total_cgst, total_sgst,
+    last_raw_event_id, fetched_at
+)
+<span class="kw">VALUES</span> (
+    <span class="st">%(gstin)s</span>, <span class="st">%(year)s</span>, <span class="st">%(month)s</span>,
+    <span class="st">%(records)s</span>, <span class="st">%(count)s</span>, <span class="st">%(taxable)s</span>, <span class="st">%(igst)s</span>, <span class="st">%(cgst)s</span>, <span class="st">%(sgst)s</span>,
+    <span class="st">%(raw_event_id)s</span>, <span class="op">NOW()</span>
+)
+<span class="kw">ON CONFLICT</span> (gstin, year, month) <span class="kw">DO UPDATE SET</span>
+    records           = <span class="op">EXCLUDED</span>.records,
+    invoice_count     = <span class="op">EXCLUDED</span>.invoice_count,
+    total_taxable     = <span class="op">EXCLUDED</span>.total_taxable,
+    total_igst        = <span class="op">EXCLUDED</span>.total_igst,
+    total_cgst        = <span class="op">EXCLUDED</span>.total_cgst,
+    total_sgst        = <span class="op">EXCLUDED</span>.total_sgst,
+    last_raw_event_id = <span class="op">EXCLUDED</span>.last_raw_event_id,
+    fetched_at        = <span class="op">NOW()</span>;
+
+<span class="cm">-- Raw events table (Layer 1): idempotency_key prevents duplicate rows</span>
+<span class="kw">INSERT INTO</span> gstr1.raw_events (idempotency_key, gstin, endpoint, year, month, payload, ...)
+<span class="kw">VALUES</span> (<span class="st">%(key)s</span>, ...)
+<span class="kw">ON CONFLICT</span> (idempotency_key) <span class="kw">DO NOTHING</span>;  <span class="cm">-- silent no-op if already exists</span>
+</div>
+  </div>
+</section>
+
+<!-- ──────────── S7: UNIVERSAL TABLE TEMPLATE ──────────── -->
+<section id="s7">
+  <div class="section-eyebrow">Implementation · 07</div>
+  <h1 class="section-title">The universal table template</h1>
+  <p class="section-desc">Every single service function gets two tables following this exact template. Copy-paste this and fill in the function-specific columns. <strong>Consistency is the point</strong> — any developer can read any table and immediately understand it.</p>
+
+  <div class="code-block">
+    <div class="code-header"><span class="lang">SQL</span> Template — replace SCHEMA and TABLE_NAME for each function</div>
+    <div class="code-body"><span class="cm">-- ════════════════════════════════════════════════════════════════</span>
+<span class="cm">-- LAYER 1: Raw event log (append-only, immutable)</span>
+<span class="cm">-- Naming: {schema}.raw_events (shared per schema — all endpoints)</span>
+<span class="cm">-- ════════════════════════════════════════════════════════════════</span>
+<span class="kw">CREATE TABLE IF NOT EXISTS</span> {SCHEMA}.raw_events (
+    <span class="cn">id</span>               <span class="ty">BIGSERIAL</span>    <span class="kw">PRIMARY KEY</span>,
+    <span class="cn">idempotency_key</span>  <span class="ty">TEXT</span>         <span class="kw">UNIQUE NOT NULL</span>,
+    <span class="cn">gstin</span>            <span class="ty">TEXT</span>         <span class="kw">NOT NULL</span>,
+    <span class="cn">endpoint</span>         <span class="ty">TEXT</span>         <span class="kw">NOT NULL</span>,
+    <span class="cn">year</span>             <span class="ty">TEXT</span>,
+    <span class="cn">month</span>            <span class="ty">TEXT</span>,
+    <span class="cn">http_status</span>      <span class="ty">INTEGER</span>,
+    <span class="cn">gst_status_cd</span>    <span class="ty">TEXT</span>,
+    <span class="cn">payload</span>          <span class="ty">JSONB</span>        <span class="kw">NOT NULL</span>,
+    <span class="cn">fetched_at</span>       <span class="ty">TIMESTAMPTZ</span>  <span class="kw">NOT NULL DEFAULT NOW()</span>,
+    <span class="cn">duration_ms</span>      <span class="ty">INTEGER</span>,
+    <span class="cn">triggered_by</span>     <span class="ty">TEXT</span>
+);
+<span class="kw">CREATE INDEX IF NOT EXISTS</span> ON {SCHEMA}.raw_events
+    (gstin, endpoint, year, month, fetched_at <span class="kw">DESC</span>);
+
+<span class="cm">-- ════════════════════════════════════════════════════════════════</span>
+<span class="cm">-- LAYER 2: Parsed state table (one row per identity key, upserted)</span>
+<span class="cm">-- Naming: {schema}.{endpoint}   e.g. gstr1.b2b, gstr3b.details</span>
+<span class="cm">-- ════════════════════════════════════════════════════════════════</span>
+<span class="kw">CREATE TABLE IF NOT EXISTS</span> {SCHEMA}.{TABLE_NAME} (
+    <span class="cm">-- Identity (Primary Key — never changes)</span>
+    <span class="cn">gstin</span>             <span class="ty">TEXT</span>         <span class="kw">NOT NULL</span>,
+    <span class="cn">year</span>              <span class="ty">TEXT</span>         <span class="kw">NOT NULL</span>,
+    <span class="cn">month</span>             <span class="ty">TEXT</span>         <span class="kw">NOT NULL</span>,
+    <span class="kw">PRIMARY KEY</span>       (gstin, year, month),
+
+    <span class="cm">-- ↓↓ ADD FUNCTION-SPECIFIC COLUMNS HERE ↓↓</span>
+    <span class="cn">{specific_column_1}</span>  <span class="ty">NUMERIC</span>,       <span class="cm">-- e.g. total_igst</span>
+    <span class="cn">{specific_column_2}</span>  <span class="ty">INTEGER</span>,       <span class="cm">-- e.g. invoice_count</span>
+    <span class="cn">records</span>              <span class="ty">JSONB</span>,         <span class="cm">-- structured parsed data array</span>
+    <span class="cm">-- ↑↑ END FUNCTION-SPECIFIC COLUMNS ↑↑</span>
+
+    <span class="cm">-- Lineage (links back to source of truth)</span>
+    <span class="cn">last_raw_event_id</span>    <span class="ty">BIGINT</span>   <span class="kw">REFERENCES</span> {SCHEMA}.raw_events(id),
+
+    <span class="cm">-- Timestamps</span>
+    <span class="cn">fetched_at</span>           <span class="ty">TIMESTAMPTZ</span>  <span class="kw">NOT NULL DEFAULT NOW()</span>,
+    <span class="cn">created_at</span>           <span class="ty">TIMESTAMPTZ</span>  <span class="kw">NOT NULL DEFAULT NOW()</span>
+);
+<span class="kw">CREATE INDEX IF NOT EXISTS</span> ON {SCHEMA}.{TABLE_NAME} (gstin, fetched_at <span class="kw">DESC</span>);
+</div>
+  </div>
+
+  <div class="callout purple">
+    <strong>Note <code>last_raw_event_id</code>:</strong> This foreign key links every state row back to the exact raw API response that produced it. If you want to re-parse or audit a specific fetch, you can do: <code>SELECT payload FROM gstr1.raw_events WHERE id = (SELECT last_raw_event_id FROM gstr1.b2b WHERE gstin=... AND year=... AND month=...)</code>. Perfect traceability.
+  </div>
+</section>
+
+<!-- ──────────── S8: MIGRATIONS ──────────── -->
+<section id="s8">
+  <div class="section-eyebrow">Implementation · 08</div>
+  <h1 class="section-title">Migration strategy — Alembic</h1>
+  <p class="section-desc">Never run raw SQL ALTER TABLE in production. Every schema change is a migration file — version-controlled, reversible, and applied consistently. This is how every serious Python project manages database changes.</p>
+
+  <div class="card-grid">
+    <div class="card b">
+      <div class="card-icon">📁</div>
+      <h3>File-based versioning</h3>
+      <p>Each change is a <code>.py</code> file: <code>0001_create_core_schema.py</code>, <code>0012_add_gstr1_b2b.py</code>. Committed to Git. Every developer applies the same changes.</p>
+      <span class="tag">Alembic</span>
+    </div>
+    <div class="card g">
+      <div class="card-icon">↩️</div>
+      <h3>Reversible changes</h3>
+      <p>Every migration has an <code>upgrade()</code> and <code>downgrade()</code> function. If a deployment goes wrong, you roll back with one command.</p>
+      <span class="tag">upgrade / downgrade</span>
+    </div>
+    <div class="card y">
+      <div class="card-icon">➕</div>
+      <h3>Adding a new function</h3>
+      <p>Run <code>alembic revision --autogenerate -m "add_gstr1_txp"</code>. It detects the new table in your models and writes the migration automatically.</p>
+      <span class="tag">autogenerate</span>
+    </div>
+    <div class="card p">
+      <div class="card-icon">🔒</div>
+      <h3>Non-breaking changes only</h3>
+      <p>New columns: always <code>DEFAULT NULL</code> or with a default. Drop old columns: never immediately — deprecate first. Old code keeps working.</p>
+      <span class="tag">backwards compatible</span>
+    </div>
+  </div>
+
+  <div class="code-block">
+    <div class="code-header"><span class="lang">Python</span> Alembic migration example — adding gstr1_txp table</div>
+    <div class="code-body"><span class="cm"># migrations/versions/0015_add_gstr1_txp.py</span>
+<span class="cm"># This file is auto-generated, then you review & commit it to Git.</span>
+
+<span class="kw">def</span> <span class="fn">upgrade</span>():
+    op.execute(<span class="st">"CREATE SCHEMA IF NOT EXISTS gstr1"</span>)
+
+    op.create_table(
+        <span class="st">'txp'</span>,
+        sa.Column(<span class="st">'gstin'</span>,     sa.Text(), nullable=<span class="kw">False</span>),
+        sa.Column(<span class="st">'year'</span>,      sa.Text(), nullable=<span class="kw">False</span>),
+        sa.Column(<span class="st">'month'</span>,     sa.Text(), nullable=<span class="kw">False</span>),
+        sa.Column(<span class="st">'records'</span>,   <span class="fn">JSONB</span>()),
+        sa.Column(<span class="st">'total_taxable'</span>, sa.Numeric()),
+        sa.Column(<span class="st">'last_raw_event_id'</span>, sa.BigInteger(), <span class="kw">nullable=True</span>),
+        sa.Column(<span class="st">'fetched_at'</span>, <span class="fn">TIMESTAMP</span>(timezone=<span class="kw">True</span>), server_default=<span class="fn">func.now</span>()),
+        sa.Column(<span class="st">'created_at'</span>, <span class="fn">TIMESTAMP</span>(timezone=<span class="kw">True</span>), server_default=<span class="fn">func.now</span>()),
+        sa.PrimaryKeyConstraint(<span class="st">'gstin'</span>, <span class="st">'year'</span>, <span class="st">'month'</span>),
+        schema=<span class="st">'gstr1'</span>
+    )
+
+<span class="kw">def</span> <span class="fn">downgrade</span>():
+    op.drop_table(<span class="st">'txp'</span>, schema=<span class="st">'gstr1'</span>)
+</div>
+  </div>
+</section>
+
+<!-- ──────────── S9: WHAT NOT TO DO ──────────── -->
+<section id="s9">
+  <div class="section-eyebrow">Implementation · 09</div>
+  <h1 class="section-title">What NOT to do — anti-patterns to avoid</h1>
+
+  <ul class="checklist">
+    <li>
+      <span class="c-icon">🚫</span>
+      <div><strong>Don't store money as FLOAT.</strong> Use <code class="mono" style="color:var(--c)">NUMERIC(18, 2)</code> for all tax amounts. Floating point has rounding errors — ₹0.01 discrepancies in a CA firm's audit report will cause chaos.</div>
+    </li>
+    <li>
+      <span class="c-icon">🚫</span>
+      <div><strong>Don't delete raw events. Ever.</strong> The raw table is append-only. If you fetched bad data, the next fetch overwrites the state table. But the bad raw response stays in history — it's evidence of what the GST portal returned.</div>
+    </li>
+    <li>
+      <span class="c-icon">🚫</span>
+      <div><strong>Don't put business logic in SQL triggers.</strong> Use the Python service layer for transformations. SQL triggers are invisible, hard to test, and make debugging a nightmare when the GST API changes its response format.</div>
+    </li>
+    <li>
+      <span class="c-icon">🚫</span>
+      <div><strong>Don't use TEXT for year/month if you ever need date math.</strong> Either store as <code class="mono" style="color:var(--c)">TEXT</code> consistently (simple, safe) OR store as a proper <code class="mono" style="color:var(--c)">DATE</code> (first day of month). Never mix — inconsistency here causes silent bugs in period comparisons.</div>
+    </li>
+    <li>
+      <span class="c-icon">🚫</span>
+      <div><strong>Don't put all raw_events in one global table.</strong> Keep them schema-scoped (<code class="mono" style="color:var(--c)">gstr1.raw_events</code>, <code class="mono" style="color:var(--c)">gstr3b.raw_events</code>). A single global table becomes a 100M-row monster and loses the isolation benefit entirely.</div>
+    </li>
+    <li>
+      <span class="c-icon">🚫</span>
+      <div><strong>Don't skip the <code class="mono" style="color:var(--c)">triggered_by</code> column.</strong> When something goes wrong at 3am, you need to know whether the bad data came from your scheduler, a user's manual request, or a webhook. Without this, debugging takes 10x longer.</div>
+    </li>
+    <li>
+      <span class="c-icon">🚫</span>
+      <div><strong>Don't store access tokens without an expiry column.</strong> Your <code class="mono" style="color:var(--c)">core.sessions</code> table must have <code class="mono" style="color:var(--c)">token_expires_at</code>. Without it, the session_refresh_manager has to re-decode every JWT on every refresh cycle instead of just querying expiring sessions.</div>
+    </li>
+  </ul>
+</section>
+
+<!-- ──────────── S10: FULL SQL ──────────── -->
+<section id="s10">
+  <div class="section-eyebrow">Production · 10</div>
+  <h1 class="section-title">Production-ready SQL — complete core schema</h1>
+  <p class="section-desc">This is the exact SQL you run once to set up the foundation. Every service schema follows the same pattern after this.</p>
+
+  <div class="code-block">
+    <div class="code-header"><span class="lang">SQL</span> core schema — sessions, taxpayers, api_calls</div>
+    <div class="code-body"><span class="kw">CREATE SCHEMA IF NOT EXISTS</span> core;
+
+<span class="cm">-- Taxpayer registry</span>
+<span class="kw">CREATE TABLE</span> core.taxpayers (
+    <span class="cn">gstin</span>          <span class="ty">TEXT</span>         <span class="kw">PRIMARY KEY</span>,
+    <span class="cn">trade_name</span>     <span class="ty">TEXT</span>,
+    <span class="cn">state_code</span>     <span class="ty">TEXT</span>         <span class="kw">GENERATED ALWAYS AS</span> (<span class="fn">LEFT</span>(gstin, 2)) <span class="kw">STORED</span>,
+    <span class="cn">created_at</span>     <span class="ty">TIMESTAMPTZ</span>  <span class="kw">NOT NULL DEFAULT NOW()</span>,
+    <span class="cn">updated_at</span>     <span class="ty">TIMESTAMPTZ</span>  <span class="kw">NOT NULL DEFAULT NOW()</span>
+);
+
+<span class="cm">-- Active sessions (one per GSTIN — upserted on OTP verify)</span>
+<span class="kw">CREATE TABLE</span> core.sessions (
+    <span class="cn">gstin</span>             <span class="ty">TEXT</span>         <span class="kw">PRIMARY KEY REFERENCES</span> core.taxpayers(gstin),
+    <span class="cn">access_token</span>      <span class="ty">TEXT</span>         <span class="kw">NOT NULL</span>,
+    <span class="cn">token_expires_at</span>  <span class="ty">TIMESTAMPTZ</span>  <span class="kw">NOT NULL</span>,
+    <span class="cn">username</span>          <span class="ty">TEXT</span>         <span class="kw">NOT NULL</span>,
+    <span class="cn">created_at</span>        <span class="ty">TIMESTAMPTZ</span>  <span class="kw">NOT NULL DEFAULT NOW()</span>,
+    <span class="cn">last_refreshed_at</span> <span class="ty">TIMESTAMPTZ</span>,
+    <span class="cn">refresh_count</span>     <span class="ty">INTEGER</span>      <span class="kw">NOT NULL DEFAULT 0</span>
+);
+
+<span class="cm">-- Expiring sessions index — used by session_refresh_manager</span>
+<span class="kw">CREATE INDEX</span> ON core.sessions (token_expires_at)
+    <span class="kw">WHERE</span> token_expires_at &lt; <span class="op">NOW()</span> + <span class="st">INTERVAL '30 minutes'</span>;
+
+<span class="cm">-- Global API call log (every call to any GST endpoint)</span>
+<span class="kw">CREATE TABLE</span> core.api_calls (
+    <span class="cn">id</span>             <span class="ty">BIGSERIAL</span>    <span class="kw">PRIMARY KEY</span>,
+    <span class="cn">gstin</span>          <span class="ty">TEXT</span>         <span class="kw">NOT NULL</span>,
+    <span class="cn">service</span>        <span class="ty">TEXT</span>         <span class="kw">NOT NULL</span>,
+    <span class="cn">function_name</span>  <span class="ty">TEXT</span>         <span class="kw">NOT NULL</span>,
+    <span class="cn">year</span>           <span class="ty">TEXT</span>,
+    <span class="cn">month</span>          <span class="ty">TEXT</span>,
+    <span class="cn">success</span>        <span class="ty">BOOLEAN</span>      <span class="kw">NOT NULL</span>,
+    <span class="cn">http_status</span>    <span class="ty">INTEGER</span>,
+    <span class="cn">gst_status_cd</span>  <span class="ty">TEXT</span>,
+    <span class="cn">error_code</span>     <span class="ty">TEXT</span>,
+    <span class="cn">error_message</span>  <span class="ty">TEXT</span>,
+    <span class="cn">duration_ms</span>    <span class="ty">INTEGER</span>,
+    <span class="cn">called_at</span>      <span class="ty">TIMESTAMPTZ</span>  <span class="kw">NOT NULL DEFAULT NOW()</span>,
+    <span class="cn">triggered_by</span>   <span class="ty">TEXT</span>
+);
+<span class="kw">CREATE INDEX</span> ON core.api_calls (gstin, called_at <span class="kw">DESC</span>);
+<span class="kw">CREATE INDEX</span> ON core.api_calls (success, service) <span class="kw">WHERE NOT</span> success;
+</div>
+  </div>
+
+  <div class="code-block">
+    <div class="code-header"><span class="lang">SQL</span> gstr1 schema — raw_events + b2b (repeat pattern for each endpoint)</div>
+    <div class="code-body"><span class="kw">CREATE SCHEMA IF NOT EXISTS</span> gstr1;
+
+<span class="cm">-- Shared raw event log for all gstr1 endpoints</span>
+<span class="kw">CREATE TABLE</span> gstr1.raw_events (
+    <span class="cn">id</span>               <span class="ty">BIGSERIAL</span>    <span class="kw">PRIMARY KEY</span>,
+    <span class="cn">idempotency_key</span>  <span class="ty">TEXT</span>         <span class="kw">UNIQUE NOT NULL</span>,
+    <span class="cn">gstin</span>            <span class="ty">TEXT</span>         <span class="kw">NOT NULL</span>,
+    <span class="cn">endpoint</span>         <span class="ty">TEXT</span>         <span class="kw">NOT NULL</span>,  <span class="cm">-- 'b2b', 'b2cs', 'cdnr'...</span>
+    <span class="cn">year</span>             <span class="ty">TEXT</span>,
+    <span class="cn">month</span>            <span class="ty">TEXT</span>,
+    <span class="cn">http_status</span>      <span class="ty">INTEGER</span>,
+    <span class="cn">gst_status_cd</span>    <span class="ty">TEXT</span>,
+    <span class="cn">payload</span>          <span class="ty">JSONB</span>        <span class="kw">NOT NULL</span>,
+    <span class="cn">fetched_at</span>       <span class="ty">TIMESTAMPTZ</span>  <span class="kw">NOT NULL DEFAULT NOW()</span>,
+    <span class="cn">duration_ms</span>      <span class="ty">INTEGER</span>,
+    <span class="cn">triggered_by</span>     <span class="ty">TEXT</span>
+);
+<span class="kw">CREATE INDEX</span> ON gstr1.raw_events (gstin, endpoint, year, month, fetched_at <span class="kw">DESC</span>);
+
+<span class="cm">-- B2B state table (one per endpoint, following the universal template)</span>
+<span class="kw">CREATE TABLE</span> gstr1.b2b (
+    <span class="cn">gstin</span>              <span class="ty">TEXT</span>          <span class="kw">NOT NULL</span>,
+    <span class="cn">year</span>               <span class="ty">TEXT</span>          <span class="kw">NOT NULL</span>,
+    <span class="cn">month</span>              <span class="ty">TEXT</span>          <span class="kw">NOT NULL</span>,
+    <span class="kw">PRIMARY KEY</span>        (gstin, year, month),
+
+    <span class="cm">-- Function-specific columns (extracted for fast SQL queries)</span>
+    <span class="cn">invoice_count</span>      <span class="ty">INTEGER</span>,
+    <span class="cn">total_taxable</span>      <span class="ty">NUMERIC(18,2)</span>,
+    <span class="cn">total_igst</span>         <span class="ty">NUMERIC(18,2)</span>,
+    <span class="cn">total_cgst</span>         <span class="ty">NUMERIC(18,2)</span>,
+    <span class="cn">total_sgst</span>         <span class="ty">NUMERIC(18,2)</span>,
+    <span class="cn">total_cess</span>         <span class="ty">NUMERIC(18,2)</span>,
+    <span class="cn">records</span>            <span class="ty">JSONB</span>,
+
+    <span class="cm">-- Lineage</span>
+    <span class="cn">last_raw_event_id</span>  <span class="ty">BIGINT</span>  <span class="kw">REFERENCES</span> gstr1.raw_events(id),
+    <span class="cn">fetched_at</span>         <span class="ty">TIMESTAMPTZ</span>   <span class="kw">NOT NULL DEFAULT NOW()</span>,
+    <span class="cn">created_at</span>         <span class="ty">TIMESTAMPTZ</span>   <span class="kw">NOT NULL DEFAULT NOW()</span>
+);
+
+<span class="cm">-- Repeat CREATE TABLE for: b2cs, b2csa, b2cl, cdnr, cdnur,</span>
+<span class="cm">--   exp, at, txp, hsn, nil, doc_issue, summary</span>
+<span class="cm">-- Each follows the exact same structure above.</span>
+<span class="cm">-- Only the "function-specific columns" section changes per table.</span>
+</div>
+  </div>
+</section>
+
+<!-- ──────────── S11: PYTHON LAYER ──────────── -->
+<section id="s11">
+  <div class="section-eyebrow">Production · 11</div>
+  <h1 class="section-title">Python layer — the repository pattern</h1>
+  <p class="section-desc">In the service layer, separate the "fetch from GST API" logic from the "save to DB" logic. The repository pattern makes this clean, testable, and consistent across all services.</p>
+
+  <div class="code-block">
+    <div class="code-header"><span class="lang">Python</span> repositories/gstr1_repo.py — DB layer, zero business logic</div>
+    <div class="code-body"><span class="kw">from</span> datetime <span class="kw">import</span> datetime, timezone
+<span class="kw">import</span> hashlib, json
+
+<span class="kw">class</span> <span class="fn">Gstr1Repository</span>:
+    <span class="st">"""All DB operations for gstr1 schema. No business logic here."""</span>
+
+    <span class="kw">def</span> <span class="fn">__init__</span>(self, conn):
+        self.conn = conn
+
+    <span class="kw">def</span> <span class="fn">_idempotency_key</span>(self, gstin, endpoint, year, month, fetched_at):
+        <span class="cm"># Stable key: same gstin+endpoint+period in same minute = same key</span>
+        raw = <span class="st">f"{gstin}:{endpoint}:{year}:{month}:{fetched_at.strftime('%Y%m%d%H%M')}"</span>
+        <span class="kw">return</span> hashlib.sha256(raw.encode()).hexdigest()[:32]
+
+    <span class="kw">def</span> <span class="fn">insert_raw_event</span>(self, gstin, endpoint, year, month, payload,
+                          http_status, gst_status_cd, duration_ms, triggered_by):
+        <span class="st">"""Layer 1: append-only insert. Returns the new row id."""</span>
+        now = datetime.now(timezone.utc)
+        key = self._idempotency_key(gstin, endpoint, year, month, now)
+
+        <span class="kw">with</span> self.conn.cursor() <span class="kw">as</span> cur:
+            cur.execute(<span class="st">"""
+                INSERT INTO gstr1.raw_events
+                    (idempotency_key, gstin, endpoint, year, month,
+                     http_status, gst_status_cd, payload, duration_ms, triggered_by)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                ON CONFLICT (idempotency_key) DO NOTHING
+                RETURNING id
+            """</span>, (key, gstin, endpoint, year, month,
+                    http_status, gst_status_cd, json.dumps(payload),
+                    duration_ms, triggered_by))
+            row = cur.fetchone()
+            <span class="kw">return</span> row[0] <span class="kw">if</span> row <span class="kw">else None</span>
+
+    <span class="kw">def</span> <span class="fn">upsert_b2b</span>(self, gstin, year, month, parsed, raw_event_id):
+        <span class="st">"""Layer 2: upsert current best-known state."""</span>
+        <span class="kw">with</span> self.conn.cursor() <span class="kw">as</span> cur:
+            cur.execute(<span class="st">"""
+                INSERT INTO gstr1.b2b
+                    (gstin, year, month, invoice_count, total_taxable,
+                     total_igst, total_cgst, total_sgst, total_cess,
+                     records, last_raw_event_id)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                ON CONFLICT (gstin, year, month) DO UPDATE SET
+                    invoice_count     = EXCLUDED.invoice_count,
+                    total_taxable     = EXCLUDED.total_taxable,
+                    total_igst        = EXCLUDED.total_igst,
+                    total_cgst        = EXCLUDED.total_cgst,
+                    total_sgst        = EXCLUDED.total_sgst,
+                    total_cess        = EXCLUDED.total_cess,
+                    records           = EXCLUDED.records,
+                    last_raw_event_id = EXCLUDED.last_raw_event_id,
+                    fetched_at        = NOW()
+            """</span>, (gstin, year, month,
+                    parsed[<span class="st">'invoice_count'</span>], parsed[<span class="st">'total_taxable'</span>],
+                    parsed[<span class="st">'total_igst'</span>],   parsed[<span class="st">'total_cgst'</span>],
+                    parsed[<span class="st">'total_sgst'</span>],   parsed[<span class="st">'total_cess'</span>],
+                    json.dumps(parsed[<span class="st">'records'</span>]), raw_event_id))
+        self.conn.commit()
+</div>
+  </div>
+
+  <div class="code-block">
+    <div class="code-header"><span class="lang">Python</span> gstr1_service.py — service layer now just orchestrates</div>
+    <div class="code-body"><span class="cm"># The service function becomes much cleaner.</span>
+<span class="cm"># Its only job: fetch, parse, persist, return.</span>
+
+<span class="kw">def</span> <span class="fn">get_gstr1_b2b</span>(gstin, year, month, triggered_by=<span class="st">'manual'</span>) -> Dict[str, Any]:
+    t0 = time.time()
+    session = get_session(gstin)
+    <span class="kw">if not</span> session:
+        <span class="kw">return</span> {<span class="st">"success"</span>: <span class="kw">False</span>, <span class="st">"message"</span>: <span class="st">"Session not found"</span>}
+
+    <span class="cm"># 1. Fetch from GST API</span>
+    response = requests.get(url, headers=headers, timeout=30)
+    payload = response.json()
+    duration_ms = int((time.time() - t0) * 1000)
+
+    <span class="cm"># 2. Persist raw event (Layer 1) — always, even on failure</span>
+    repo = Gstr1Repository(get_db_conn())
+    raw_id = repo.insert_raw_event(
+        gstin, <span class="st">'b2b'</span>, year, month, payload,
+        response.status_code, str(payload.get(<span class="st">'data',{}</span>).get(<span class="st">'status_cd'</span>,<span class="st">''</span>)),
+        duration_ms, triggered_by
+    )
+
+    <span class="cm"># 3. Log the call (always, success or fail)</span>
+    log_api_call(gstin, <span class="st">'gstr1'</span>, <span class="st">'get_gstr1_b2b'</span>, year, month,
+                 success=<span class="kw">True</span>, duration_ms=duration_ms)
+
+    <span class="cm"># 4. Parse</span>
+    parsed = parse_b2b(payload)
+
+    <span class="cm"># 5. Upsert state (Layer 2)</span>
+    repo.upsert_b2b(gstin, year, month, parsed, raw_id)
+
+    <span class="kw">return</span> {<span class="st">"success"</span>: <span class="kw">True</span>, <span class="st">"records"</span>: parsed[<span class="st">'records'</span>], ...}
+</div>
+  </div>
+
+  <div class="callout" style="border-left-color: var(--g); margin-top: 8px;">
+    <strong>Adding a new function to gstr1_service.py tomorrow:</strong> Create <code>gstr1.txp</code> table via Alembic migration. Add <code>upsert_txp()</code> to <code>Gstr1Repository</code>. Call it from the service function. <strong>Zero other files change.</strong> This is the consistency the question asked for.
+  </div>
+</section>
+
+</main>
+</div>
+
+<script>
+// Sidebar active state on scroll
+const sections = document.querySelectorAll('section[id]');
+const navItems = document.querySelectorAll('.nav-item');
+
+const obs = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      navItems.forEach(n => n.classList.remove('active'));
+      const link = document.querySelector(`.nav-item[href="#${e.target.id}"]`);
+      if (link) link.classList.add('active');
+    }
+  });
+}, { threshold: 0.3 });
+
+sections.forEach(s => obs.observe(s));
+</script>
+</body>
+</html>

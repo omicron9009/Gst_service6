@@ -1,2 +1,10 @@
+## Python cache and bytecode
+__pycache__/
+**/__pycache__/
+*.py[cod]
+
+## Local configuration (keep out of git)
 config.py
-sessions/*
+
+## Session data
+sessions/

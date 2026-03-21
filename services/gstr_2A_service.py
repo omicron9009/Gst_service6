@@ -1,12 +1,12 @@
 
 #--------------not available----------- 
 #  amdhist 
-#  ecom 
-#  ecoma 
-#  impg 
+#  ecom - 
+#  ecoma -Must do 
+#  impg - Must do 
 #  impgsez 
 #  tcs
-#  tds
+
  
 # -------------------------------------
 
@@ -17,7 +17,7 @@
 #  cdna
 #  2a doc
 #  isd 
-
+#  tds
 
 import requests
 from typing import Dict, Any, Optional
@@ -667,4 +667,107 @@ def get_gstr2a_isd(gstin: str, year: str, month: str, counterparty_gstin: str = 
         "upstream_status_code": response.status_code,
         "records": interpreted,
         "raw": payload
+    }
+
+
+def get_gstr2a_tds(gstin: str, year: str, month: str) -> Dict[str, Any]:
+
+    session = get_session(gstin)
+    if not session:
+        return {"success": False, "message": "GST session not found"}
+
+    token = session.get("access_token")
+    url = f"{BASE_URL}/gst/compliance/tax-payer/gstrs/gstr-2a/tds/{year}/{month}"
+
+    headers = {
+        "Authorization": token,
+        "x-api-key":     API_KEY,
+        "x-api-version": API_VERSION,
+        "x-source":      "primary",
+    }
+
+    try:
+        response = requests.get(url, headers=headers, timeout=30)
+        payload = response.json()
+    except Exception as e:
+        return {"success": False, "message": "Failed to contact GST API", "error": str(e)}
+
+    outer_data = payload.get("data", {})
+    status_cd  = str(outer_data.get("status_cd", ""))
+
+    if status_cd == "0":
+        error_block = outer_data.get("error", {})
+        return {
+            "success":    False,
+            "status_cd":  "0",
+            "error_code": error_block.get("error_cd"),
+            "message":    error_block.get("message"),
+            "raw":        payload,
+        }
+
+    inner = outer_data.get("data", {})
+
+    # ── tds: TDS credit entries auto-populated from deductors' GSTR-7 ─────────
+    # Each entry is one deductor's TDS deduction for the period.
+    #
+    # gstin_ded:       recipient GSTIN (the taxpayer whose ITC is being credited)
+    # gstin_deductor:  deductor's GSTIN (the entity that deducted TDS)
+    # deductor_name:   deductor's registered trade/legal name
+    # month:           return period in MMYYYY format (e.g. "062025" = June 2025)
+    # amt_ded:         base contract/invoice value on which TDS was deducted
+    # iamt:            IGST TDS amount credited
+    # camt:            CGST TDS amount credited
+    # samt:            SGST TDS amount credited
+    # (no cess on TDS)
+
+    def _parse_tds_entry(entry: dict) -> Dict[str, Any]:
+        igst = entry.get("iamt", 0) or 0.0
+        cgst = entry.get("camt", 0) or 0.0
+        sgst = entry.get("samt", 0) or 0.0
+        total_tds = igst + cgst + sgst
+
+        return {
+            "deductor_name":    entry.get("deductor_name"),
+            "deductor_gstin":   entry.get("gstin_deductor"),
+            "recipient_gstin":  entry.get("gstin_ded"),
+            "return_period":    entry.get("month"),        # "MMYYYY"
+
+            # Base amount on which TDS was deducted
+            "deduction_base_amount": entry.get("amt_ded", 0) or 0.0,
+
+            # TDS tax credit breakdown
+            "tds_credit": {
+                "igst":      igst,
+                "cgst":      cgst,
+                "sgst":      sgst,
+                "total":     total_tds,
+            },
+        }
+
+    tds_entries = [_parse_tds_entry(e) for e in (inner.get("tds") or [])]
+
+    # Grand totals across all deductors
+    grand_base  = sum(e["deduction_base_amount"]  for e in tds_entries)
+    grand_igst  = sum(e["tds_credit"]["igst"]      for e in tds_entries)
+    grand_cgst  = sum(e["tds_credit"]["cgst"]      for e in tds_entries)
+    grand_sgst  = sum(e["tds_credit"]["sgst"]      for e in tds_entries)
+
+    return {
+        "success":       True,
+        "status_cd":     status_cd,
+
+        # TDS credit entries — one per deductor per period
+        "tds":           tds_entries,
+        "entry_count":   len(tds_entries),
+
+        # Aggregate TDS credit available across all deductors
+        "grand_totals": {
+            "deduction_base_amount": grand_base,
+            "igst":                  grand_igst,
+            "cgst":                  grand_cgst,
+            "sgst":                  grand_sgst,
+            "total_tds_credit":      grand_igst + grand_cgst + grand_sgst,
+        },
+
+        "raw": payload,
     }

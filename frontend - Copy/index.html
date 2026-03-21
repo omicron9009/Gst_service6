@@ -1,94 +1,406 @@
 <!DOCTYPE html>
-<html>
-
+<html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>GSTR1 Dashboard</title>
-<link rel="stylesheet" href="style.css">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GST API Dashboard</title>
+
+<style>
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Segoe UI', sans-serif;
+  background: #f0f4f8;
+  color: #1a202c;
+}
+
+.container {
+  max-width: 720px;
+  margin: 40px auto;
+  padding: 0 16px;
+}
+
+h1 {
+  font-size: 1.6rem;
+  font-weight: 700;
+  margin-bottom: 24px;
+  color: #2d3748;
+}
+
+h2 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: #4a5568;
+}
+
+.card {
+  background: #fff;
+  border-radius: 10px;
+  padding: 24px;
+  margin-bottom: 20px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+}
+
+label {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+
+input, select {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid #cbd5e0;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  margin-bottom: 12px;
+}
+
+.btn {
+  padding: 9px 18px;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-primary { background: #4299e1; color: white; }
+.btn-success { background: #48bb78; color: white; }
+.btn-warning { background: #ed8936; color: white; }
+
+.btn-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.badge {
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.badge-active { background: #c6f6d5; color: #276749; }
+.badge-inactive { background: #fed7d7; color: #9b2c2c; }
+
+#response-box {
+  background: #1a202c;
+  color: #a0aec0;
+  border-radius: 8px;
+  padding: 16px;
+  font-family: monospace;
+  font-size: 0.82rem;
+  min-height: 80px;
+  max-height: 360px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+}
+
+.input-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.hidden { display:none; }
+
+</style>
 </head>
 
 <body>
 
 <div class="container">
 
-<div class="sidebar">
+<h1>🧾 GST API Dashboard</h1>
 
-<h2>GST Sessions</h2>
-<div id="userList"></div>
+<!-- AUTH -->
 
-<hr>
+<div class="card">
 
-<h3>Check Session</h3>
-<input id="gstinCheck" placeholder="GSTIN">
-<button onclick="checkSession()">Check</button>
+<h2>Authentication</h2>
 
-<hr>
+<label>GSTIN</label>
+<input id="gstin">
 
-<h3>OTP Login</h3>
+<label>Username</label>
+<input id="username">
 
-<input id="username" placeholder="Username">
-<input id="gstin" placeholder="GSTIN">
-
-<button onclick="generateOTP()">Generate OTP</button>
-
-<input id="otp" placeholder="OTP">
-<button onclick="verifyOTP()">Verify</button>
-
+<div class="btn-row">
+<button class="btn btn-primary" onclick="generateOtp()">Send OTP</button>
 </div>
 
-<div class="main">
+<div id="otp-section" class="hidden">
 
-<h1>GSTR-1 Dashboard</h1>
+<label>OTP</label>
+<input id="otp">
 
-<div class="filters">
-
-<select id="gstinSelect"></select>
-
-<input id="year" value="2023">
-<input id="month" value="12">
-
-<button onclick="loadDashboard()">Load</button>
-
-</div>
-
-
-<div id="summaryCards" class="cards"></div>
-
-<div class="section">
-<h3>B2B Invoices</h3>
-<table id="b2bTable"></table>
-</div>
-
-<div class="section">
-<h3>B2CS</h3>
-<table id="b2csTable"></table>
-</div>
-
-<div class="section">
-<h3>HSN Summary</h3>
-<table id="hsnTable"></table>
-</div>
-
-<div class="section">
-<h3>NIL Supplies</h3>
-<table id="nilTable"></table>
-</div>
-
-<div class="section">
-<h3>Credit/Debit Notes</h3>
-<table id="cdnrTable"></table>
-</div>
-
-<div class="section">
-<h3>Document Issues</h3>
-<table id="docTable"></table>
+<div class="btn-row">
+<button class="btn btn-success" onclick="verifyOtp()">Verify OTP</button>
 </div>
 
 </div>
 
 </div>
 
-<script src="app.js"></script>
+<!-- SESSION -->
+
+<div class="card">
+
+<h2>Session</h2>
+
+<span class="badge badge-inactive" id="session-badge">Inactive</span>
+
+<div class="btn-row">
+<button class="btn btn-warning" onclick="refreshSession()">Refresh</button>
+<button class="btn btn-primary" onclick="checkSession()">Check</button>
+</div>
+
+</div>
+
+<!-- ADVANCE TAX -->
+
+<div class="card">
+
+<h2>GSTR1 Advance Tax</h2>
+
+<div class="input-row">
+
+<div>
+<label>Year</label>
+<input id="at-year">
+</div>
+
+<div>
+<label>Month</label>
+<input id="at-month">
+</div>
+
+</div>
+
+<button class="btn btn-primary" onclick="fetchAdvance()">Fetch</button>
+
+</div>
+
+<!-- B2B -->
+
+<div class="card">
+
+<h2>GSTR1 B2B</h2>
+
+<div class="input-row">
+
+<div>
+<label>Year</label>
+<input id="b2b-year">
+</div>
+
+<div>
+<label>Month</label>
+<input id="b2b-month">
+</div>
+
+</div>
+
+<button class="btn btn-primary" onclick="fetchB2B()">Fetch</button>
+
+</div>
+
+<!-- B2CSA -->
+
+<div class="card">
+
+<h2>GSTR1 B2CSA</h2>
+
+<div class="input-row">
+
+<div>
+<label>Year</label>
+<input id="b2csa-year">
+</div>
+
+<div>
+<label>Month</label>
+<input id="b2csa-month">
+</div>
+
+</div>
+
+<button class="btn btn-primary" onclick="fetchB2CSA()">Fetch</button>
+
+</div>
+
+<!-- SUMMARY -->
+
+<div class="card">
+
+<h2>GSTR1 Summary</h2>
+
+<div class="input-row">
+
+<div>
+<label>Year</label>
+<input id="summary-year">
+</div>
+
+<div>
+<label>Month</label>
+<input id="summary-month">
+</div>
+
+</div>
+
+<label>Summary Type</label>
+
+<select id="summary-type">
+<option value="short">Short</option>
+<option value="long">Long</option>
+</select>
+
+<button class="btn btn-primary" onclick="fetchSummary()">Fetch Summary</button>
+
+</div>
+
+<!-- RESPONSE -->
+
+<div class="card">
+
+<h2>Response</h2>
+
+<pre id="response-box">Waiting...</pre>
+
+</div>
+
+</div>
+
+<script>
+
+const API="http://localhost:8000"
+
+function gstin(){
+return document.getElementById("gstin").value.trim().toUpperCase()
+}
+
+function show(obj){
+document.getElementById("response-box").textContent=
+JSON.stringify(obj,null,2)
+}
+
+async function generateOtp(){
+
+const g=gstin()
+const u=document.getElementById("username").value
+
+const res=await fetch(`${API}/auth/generate-otp`,{
+method:"POST",
+headers:{"Content-Type":"application/json"},
+body:JSON.stringify({gstin:g,username:u})
+})
+
+const data=await res.json()
+
+show(data)
+
+document.getElementById("otp-section").classList.remove("hidden")
+
+}
+
+async function verifyOtp(){
+
+const g=gstin()
+const u=document.getElementById("username").value
+const otp=document.getElementById("otp").value
+
+const res=await fetch(`${API}/auth/verify-otp`,{
+method:"POST",
+headers:{"Content-Type":"application/json"},
+body:JSON.stringify({gstin:g,username:u,otp})
+})
+
+const data=await res.json()
+
+show(data)
+
+}
+
+async function refreshSession(){
+
+const g=gstin()
+
+const res=await fetch(`${API}/auth/refresh`,{
+method:"POST",
+headers:{"Content-Type":"application/json"},
+body:JSON.stringify({gstin:g})
+})
+
+show(await res.json())
+
+}
+
+async function checkSession(){
+
+const g=gstin()
+
+const res=await fetch(`${API}/auth/session/${g}`)
+
+show(await res.json())
+
+}
+
+async function fetchAdvance(){
+
+const g=gstin()
+const y=document.getElementById("at-year").value
+const m=document.getElementById("at-month").value
+
+const res=await fetch(`${API}/gstr1/advance-tax/${g}/${y}/${m}`)
+
+show(await res.json())
+
+}
+
+async function fetchB2B(){
+
+const g=gstin()
+const y=document.getElementById("b2b-year").value
+const m=document.getElementById("b2b-month").value
+
+const res=await fetch(`${API}/gstr1/b2b/${g}/${y}/${m}`)
+
+show(await res.json())
+
+}
+
+async function fetchB2CSA(){
+
+const g=gstin()
+const y=document.getElementById("b2csa-year").value
+const m=document.getElementById("b2csa-month").value
+
+const res=await fetch(`${API}/gstr1/b2csa/${g}/${y}/${m}`)
+
+show(await res.json())
+
+}
+
+async function fetchSummary(){
+
+const g=gstin()
+const y=document.getElementById("summary-year").value
+const m=document.getElementById("summary-month").value
+const type=document.getElementById("summary-type").value
+
+const res=await fetch(`${API}/gstr1/summary/${g}/${y}/${m}?summary_type=${type}`)
+
+show(await res.json())
+
+}
+
+</script>
 
 </body>
 </html>

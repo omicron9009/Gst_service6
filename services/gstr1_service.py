@@ -6,7 +6,7 @@
                     # cdnra
                     # cdnura
                     # expa
-                    # txp 
+
                     # txpa 
                     # ecom 
                     # ecoma 
@@ -27,7 +27,7 @@
                 # b2cl 
                 # cdnur 
                 # exp
-
+                # txp 
 
 # ---------to do -------------
 #       gst return status
@@ -1044,4 +1044,133 @@ def get_gstr1_exp(gstin: str, year: str, month: str) -> Dict[str, Any]:
         "upstream_status_code": response.status_code,
         "records": interpreted,
         "raw": payload
+    }
+
+
+def get_gstr1_txp(gstin: str, year: str, month: str, counterparty_gstin: Optional[str] = None, action_required: Optional[str] = None, from_date: Optional[str] = None) -> Dict[str, Any]:
+
+    session = get_session(gstin)
+    if not session:
+        return {"success": False, "message": "GST session not found"}
+
+    token = session.get("access_token")
+    url = f"{BASE_URL}/gst/compliance/tax-payer/gstrs/gstr-1/txp/{year}/{month}"
+
+    headers = {
+        "Authorization": token,
+        "x-api-key":     API_KEY,
+        "x-api-version": API_VERSION,
+        "x-source":      "primary",
+    }
+
+    params = {}
+    if counterparty_gstin:
+        params["counterparty_gstin"] = counterparty_gstin
+    if action_required:
+        params["action_required"] = action_required
+    if from_date:
+        params["from"] = from_date
+
+    try:
+        response = requests.get(url, headers=headers, params=params, timeout=30)
+        payload = response.json()
+    except Exception as e:
+        return {"success": False, "message": "Failed to contact GST API", "error": str(e)}
+
+    outer_data = payload.get("data", {})
+    status_cd  = str(outer_data.get("status_cd", ""))
+
+    if status_cd == "0":
+        error_block = outer_data.get("error", {})
+        return {
+            "success":    False,
+            "status_cd":  "0",
+            "error_code": error_block.get("error_cd"),
+            "message":    error_block.get("message"),
+            "raw":        payload,
+        }
+
+    inner = outer_data.get("data", {})
+
+    # ── txpd: advance tax paid entries ────────────────────────────────────────
+    # Each entry represents an advance receipt row with place-of-supply,
+    # supply type, and per-rate tax breakdowns.
+    #
+    # flag:    "N" = no action needed / already processed
+    #          "Y" = action required by taxpayer
+    # sply_ty: "INTRA" = intra-state | "INTER" = inter-state
+    # pos:     place of supply state code (2-digit)
+    # chksum:  server-side checksum for this record
+
+    def _parse_txpd_item(itm: dict) -> Dict[str, Any]:
+        return {
+            "tax_rate":        itm.get("rt"),
+            "advance_amount":  itm.get("ad_amt", 0) or 0.0,
+            "cgst":            itm.get("camt",   0) or 0.0,
+            "sgst":            itm.get("samt",   0) or 0.0,
+            "cess":            itm.get("csamt",  0) or 0.0,
+            # igst is absent on INTRA supplies; will be present on INTER
+            "igst":            itm.get("iamt",   0) or 0.0,
+        }
+
+    def _parse_txpd_entry(entry: dict) -> Dict[str, Any]:
+        items = [_parse_txpd_item(i) for i in (entry.get("itms") or [])]
+
+        # Roll-up totals across all rate slabs for this POS entry
+        total_advance  = sum(i["advance_amount"] for i in items)
+        total_igst     = sum(i["igst"]           for i in items)
+        total_cgst     = sum(i["cgst"]           for i in items)
+        total_sgst     = sum(i["sgst"]           for i in items)
+        total_cess     = sum(i["cess"]           for i in items)
+        total_tax      = total_igst + total_cgst + total_sgst + total_cess
+
+        return {
+            "pos":          entry.get("pos"),       # place of supply state code
+            "supply_type":  entry.get("sply_ty"),   # "INTRA" | "INTER"
+            "flag":         entry.get("flag"),       # "Y" = action required, "N" = none
+            "action_required": entry.get("flag") == "Y",
+            "checksum":     entry.get("chksum"),
+
+            # Per-rate-slab breakdown
+            "items": items,
+
+            # Aggregate across all slabs for this entry
+            "totals": {
+                "advance_amount": total_advance,
+                "igst":           total_igst,
+                "cgst":           total_cgst,
+                "sgst":           total_sgst,
+                "cess":           total_cess,
+                "total_tax":      total_tax,
+            },
+        }
+
+    txpd_entries = [_parse_txpd_entry(e) for e in (inner.get("txpd") or [])]
+
+    # Grand summary across all POS entries
+    grand_advance = sum(e["totals"]["advance_amount"] for e in txpd_entries)
+    grand_igst    = sum(e["totals"]["igst"]           for e in txpd_entries)
+    grand_cgst    = sum(e["totals"]["cgst"]           for e in txpd_entries)
+    grand_sgst    = sum(e["totals"]["sgst"]           for e in txpd_entries)
+    grand_cess    = sum(e["totals"]["cess"]            for e in txpd_entries)
+
+    return {
+        "success":      True,
+        "status_cd":    status_cd,
+
+        # Advance tax paid (TXP) entries grouped by place of supply
+        "txpd":         txpd_entries,
+        "entry_count":  len(txpd_entries),
+
+        # Grand totals across all POS entries
+        "grand_totals": {
+            "advance_amount": grand_advance,
+            "igst":           grand_igst,
+            "cgst":           grand_cgst,
+            "sgst":           grand_sgst,
+            "cess":           grand_cess,
+            "total_tax":      grand_igst + grand_cgst + grand_sgst + grand_cess,
+        },
+
+        "raw": payload,
     }

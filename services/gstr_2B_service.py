@@ -1,12 +1,3 @@
-# not available 
-# 
-# 
-# 
-# 
-# 
-# 
-# 
-# available
 
 
 import requests
@@ -454,6 +445,8 @@ def get_gstr2b(
         return result
 
     grand_totals = _add_totals(b2b_totals, b2ba_totals, cdnr_totals, cdnra_totals)
+
+    #save to db 
 
     return {
         "success":       True,

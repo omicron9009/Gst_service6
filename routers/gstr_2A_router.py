@@ -50,3 +50,12 @@ def gstr2a_isd(gstin: str, year: str, month: str, counterparty_gstin: str = None
     if not result.get("success"):
         raise HTTPException(status_code=400, detail=result)
     return result
+
+@router.get("/gstr2a/{gstin}/{year}/{month}/tds")
+def gstr2a_tds(gstin: str, year: str, month: str):
+    result = get_gstr2a_tds(gstin, year, month)
+
+    if not result.get("success"):
+        raise HTTPException(status_code=400, detail=result)
+
+    return result
