@@ -5,6 +5,7 @@
 import requests
 from typing import Dict, Any, Optional
 from config import BASE_URL, API_KEY, API_VERSION
+from database.persistence import persist_service_result
 from session_storage import get_session
 
 
@@ -411,5 +412,11 @@ def get_return_liability_ledger(gstin: str, year: str, month: str, from_date: st
 
         "raw": payload,
     }
+
+
+get_cash_itc_balance = persist_service_result("get_cash_itc_balance")(get_cash_itc_balance)
+get_cash_ledger = persist_service_result("get_cash_ledger")(get_cash_ledger)
+get_itc_ledger = persist_service_result("get_itc_ledger")(get_itc_ledger)
+get_return_liability_ledger = persist_service_result("get_return_liability_ledger")(get_return_liability_ledger)
 
 

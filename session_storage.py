@@ -161,3 +161,9 @@ def delete_session(gstin: str):
 
     if removed:
         logger.info("session_deleted gstin=%s", _mask_gstin(gstin))
+        try:
+            from database.persistence import sync_deactivate_client_session
+
+            sync_deactivate_client_session(gstin)
+        except Exception:
+            logger.exception("session_db_deactivate_failed gstin=%s", _mask_gstin(gstin))

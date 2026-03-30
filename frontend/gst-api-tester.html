@@ -739,7 +739,7 @@
           <code style="background:var(--surface2);padding:2px 8px;border-radius:4px;color:var(--accent2);">pip install pymysql</code>
           <span style="color:var(--muted);">&nbsp; (MySQL)<br>
           2. Start proxy &nbsp;&nbsp;</span>
-          <code id="banner-cmd" style="background:var(--surface2);padding:2px 8px;border-radius:4px;color:var(--accent);">python db_proxy.py --conn "postgresql://user:pass@localhost:5432/mydb"</code>
+          <code id="banner-cmd" style="background:var(--surface2);padding:2px 8px;border-radius:4px;color:var(--accent);">python db_proxy.py --conn "postgresql+asyncpg://postgres:root@localhost:5432/gst_dash_test"</code>
           <span style="color:var(--muted);">&nbsp; &nbsp;</span>
           <button class="btn btn-ghost btn-sm" onclick="copyProxyCmd()" style="font-size:10px;vertical-align:middle;">copy</button>
           <span style="color:var(--muted);">&nbsp;&nbsp;3. Come back here — the SQL editor will unlock automatically.</span>
@@ -1391,6 +1391,9 @@ function switchDbTab(tab) {
     const v = document.getElementById('dbview-' + t);
     if (v) { v.style.display = (t === tab) ? 'flex' : 'none'; v.classList.toggle('hidden', t !== tab); }
   });
+  if (tab === 'browse' && !dbTables.length) {
+    loadDbTables();
+  }
 }
 
 // ── Query mode toggle ──
@@ -1671,6 +1674,12 @@ async function loadDbTables() {
       const d = await r.json();
       dbTables = d.tables || (Array.isArray(d) ? d : []);
       renderDbTableList(dbTables);
+      if (dbTables.length && !dbCurrentTable) {
+        const preferredTable =
+          ['clients','gstr1_b2b','gstr3b_details','gstr9_auto_calculated','ledger_balance']
+            .find(t => dbTables.includes(t)) || dbTables[0];
+        loadTableData(preferredTable);
+      }
       toast(`Found ${dbTables.length} tables`, 'success');
       return;
     }
@@ -1808,7 +1817,7 @@ function scheduleProxyCheck() {
 
 function updateBannerCmd() {
   const el = document.getElementById('banner-cmd');
-  if (el) el.textContent = `python db_proxy.py --conn "postgresql://user:pass@localhost:5432/mydb"`;
+  if (el) el.textContent = `python db_proxy.py --conn "postgresql+asyncpg://postgres:root@localhost:5432/gst_dash_test"`;
 }
 
 function copyProxyCmd() {

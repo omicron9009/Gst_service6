@@ -1,6 +1,7 @@
 import requests
 from typing import Dict, Any, Optional
 from config import BASE_URL, API_KEY, API_VERSION
+from database.persistence import persist_service_result
 from session_storage import get_session
 
 
@@ -343,5 +344,9 @@ def get_gstr3b_auto_liability(gstin: str, year: str, month: str) -> Dict[str, An
 
         "raw": payload,
     }
+
+
+get_gstr3b_details = persist_service_result("get_gstr3b_details")(get_gstr3b_details)
+get_gstr3b_auto_liability = persist_service_result("get_gstr3b_auto_liability")(get_gstr3b_auto_liability)
 
 

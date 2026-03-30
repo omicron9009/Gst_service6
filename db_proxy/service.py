@@ -131,6 +131,7 @@ async def fetch_clients(
     stmt = select(
         Client.id,
         Client.gstin,
+        Client.username,
         Client.trade_name,
         Client.legal_name,
         Client.is_active,

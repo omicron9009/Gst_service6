@@ -39,6 +39,7 @@ import requests
 from typing import Dict, Any, Optional
 
 from config import BASE_URL, API_KEY, API_VERSION
+from database.persistence import persist_service_result
 
 # BUG FIX: Single consistent import of get_session from the flat module (not services.session_storage_manager)
 from session_storage import get_session
@@ -1174,3 +1175,18 @@ def get_gstr1_txp(gstin: str, year: str, month: str, counterparty_gstin: Optiona
 
         "raw": payload,
     }
+
+
+get_gstr1_advance_tax = persist_service_result("get_gstr1_advance_tax")(get_gstr1_advance_tax)
+get_gstr1_b2b = persist_service_result("get_gstr1_b2b")(get_gstr1_b2b)
+get_gstr1_summary = persist_service_result("get_gstr1_summary")(get_gstr1_summary)
+get_gstr1_b2csa = persist_service_result("get_gstr1_b2csa")(get_gstr1_b2csa)
+get_gstr1_b2cs = persist_service_result("get_gstr1_b2cs")(get_gstr1_b2cs)
+get_gstr1_cdnr = persist_service_result("get_gstr1_cdnr")(get_gstr1_cdnr)
+get_gstr1_doc_issue = persist_service_result("get_gstr1_doc_issue")(get_gstr1_doc_issue)
+get_gstr1_hsn = persist_service_result("get_gstr1_hsn")(get_gstr1_hsn)
+get_gstr1_nil = persist_service_result("get_gstr1_nil")(get_gstr1_nil)
+get_gstr1_b2cl = persist_service_result("get_gstr1_b2cl")(get_gstr1_b2cl)
+get_gstr1_cdnur = persist_service_result("get_gstr1_cdnur")(get_gstr1_cdnur)
+get_gstr1_exp = persist_service_result("get_gstr1_exp")(get_gstr1_exp)
+get_gstr1_txp = persist_service_result("get_gstr1_txp")(get_gstr1_txp)
