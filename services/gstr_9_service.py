@@ -1,6 +1,7 @@
 import requests
 from typing import Dict, Any, Optional
 from config import BASE_URL, API_KEY, API_VERSION
+from database.persistence import persist_service_result
 from session_storage import get_session
 
 
@@ -511,5 +512,10 @@ def get_gstr9_details(gstin: str, financial_year: str) -> Dict[str, Any]:
         "table17_hsn_summary":             table17,
         "raw": payload,
     }
+
+
+get_gstr9_auto_calculated = persist_service_result("get_gstr9_auto_calculated")(get_gstr9_auto_calculated)
+get_gstr9_table8a = persist_service_result("get_gstr9_table8a")(get_gstr9_table8a)
+get_gstr9_details = persist_service_result("get_gstr9_details")(get_gstr9_details)
 
 

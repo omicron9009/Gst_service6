@@ -3,6 +3,7 @@
 import requests
 from typing import Dict, Any, Optional
 from config import BASE_URL, API_KEY, API_VERSION
+from database.persistence import persist_service_result
 from session_storage import get_session
 
 
@@ -544,3 +545,7 @@ def get_gstr2b_regeneration_status(gstin: str, reference_id: str) -> Dict[str, A
         "error_message": inner.get("err_msg") or None,
         "raw": payload,
     }
+
+
+get_gstr2b = persist_service_result("get_gstr2b")(get_gstr2b)
+get_gstr2b_regeneration_status = persist_service_result("get_gstr2b_regeneration_status")(get_gstr2b_regeneration_status)

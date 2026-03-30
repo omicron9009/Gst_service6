@@ -9,6 +9,7 @@ from urllib.parse import urlencode
 import requests
 
 from config import API_KEY, API_SECRET, API_VERSION, BASE_URL
+from database.persistence import persist_service_result
 from session_storage import get_session, save_session
 
 logger = logging.getLogger(__name__)
@@ -465,3 +466,8 @@ def refresh_session(gstin: str) -> Dict[str, Any]:
         "data": data,
         "upstream_response": response_payload,
     }
+
+
+generate_otp = persist_service_result("generate_otp")(generate_otp)
+verify_otp = persist_service_result("verify_otp")(verify_otp)
+refresh_session = persist_service_result("refresh_session")(refresh_session)

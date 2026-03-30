@@ -5,6 +5,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from database.core.database import ensure_database_ready
+
 # BUG FIX: Import routers from flat module names to match project layout.
 # If you later move them into a 'routers/' sub-package, re-add the prefix.
 from routers.auth_router import router as auth_router
@@ -25,6 +27,7 @@ logging.basicConfig(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    await ensure_database_ready()
     start_scheduler()
     yield
     stop_scheduler()

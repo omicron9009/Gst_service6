@@ -22,6 +22,7 @@
 import requests
 from typing import Dict, Any, Optional
 from config import BASE_URL, API_KEY, API_VERSION
+from database.persistence import persist_service_result
 from session_storage import get_session
 
 
@@ -771,3 +772,12 @@ def get_gstr2a_tds(gstin: str, year: str, month: str) -> Dict[str, Any]:
 
         "raw": payload,
     }
+
+
+get_gstr2a_b2b = persist_service_result("get_gstr2a_b2b")(get_gstr2a_b2b)
+get_gstr2a_b2ba = persist_service_result("get_gstr2a_b2ba")(get_gstr2a_b2ba)
+get_gstr2a_cdn = persist_service_result("get_gstr2a_cdn")(get_gstr2a_cdn)
+get_gstr2a_cdna = persist_service_result("get_gstr2a_cdna")(get_gstr2a_cdna)
+get_gstr2a_document = persist_service_result("get_gstr2a_document")(get_gstr2a_document)
+get_gstr2a_isd = persist_service_result("get_gstr2a_isd")(get_gstr2a_isd)
+get_gstr2a_tds = persist_service_result("get_gstr2a_tds")(get_gstr2a_tds)
