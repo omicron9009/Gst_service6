@@ -1,43 +1,60 @@
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Optional
 
-from sqlalchemy import Boolean, String
+from sqlalchemy import Boolean, CheckConstraint, Index, String, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ...core.base import (
     Base,
-    ClientScopeMixin,
+    BigIntPrimaryKeyMixin,
+    ClientForeignKeyMixin,
+    FetchedUpdatedMixin,
     MonthlyPeriodMixin,
-    PrimaryKeyMixin,
-    RawPayloadMixin,
-    TimestampMixin,
+    StatusCodeMixin,
+    UpstreamStatusCodeMixin,
 )
 
 
-class GstReturnStatusRecord(
-    PrimaryKeyMixin,
-    ClientScopeMixin,
+class GstReturnStatus(
+    BigIntPrimaryKeyMixin,
+    ClientForeignKeyMixin,
     MonthlyPeriodMixin,
-    RawPayloadMixin,
-    TimestampMixin,
+    StatusCodeMixin,
+    UpstreamStatusCodeMixin,
+    FetchedUpdatedMixin,
     Base,
 ):
-    __tablename__ = "gst_return_status_records"
+    __tablename__ = "gst_return_status"
+    __table_args__ = (
+        UniqueConstraint("client_id", "year", "month", "reference_id", name="uq_gst_return_status"),
+        CheckConstraint(
+            "processing_status IS NULL OR processing_status IN ('P', 'PE', 'ER', 'REC')",
+            name="ck_gst_return_status_processing",
+        ),
+        Index("idx_gst_return_status_period", "client_id", "year", "month"),
+        Index("idx_gst_return_status_ref", "client_id", "reference_id"),
+        Index(
+            "idx_gst_return_status_errors",
+            "client_id",
+            "year",
+            "month",
+            postgresql_where=text("has_errors = TRUE"),
+        ),
+    )
 
-    reference_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
-    status_cd: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
-    form_type: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
-    form_type_label: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
+    reference_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    form_type: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    form_type_label: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     action: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
-    processing_status: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
-    processing_status_label: Mapped[Optional[str]] = mapped_column(String(60), nullable=True)
+    processing_status: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
+    processing_status_label: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     has_errors: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
-    error_code: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
-    error_message: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
-    error_report: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    error_report: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, nullable=True)
 
 
-__all__ = ["GstReturnStatusRecord"]
+GstReturnStatusRecord = GstReturnStatus
 
+
+__all__ = ["GstReturnStatus", "GstReturnStatusRecord"]

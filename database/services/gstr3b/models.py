@@ -1,71 +1,103 @@
 from __future__ import annotations
 
-from datetime import date
-from decimal import Decimal
-from typing import Optional
+from typing import Any, Optional
 
-from sqlalchemy import Date, Integer, String
+from sqlalchemy import Index, String, UniqueConstraint
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ...core.base import (
-    Amount,
     Base,
-    ClientScopeMixin,
-    JsonRecordMixin,
+    BigIntPrimaryKeyMixin,
+    ClientForeignKeyMixin,
+    FetchedUpdatedMixin,
     MonthlyPeriodMixin,
-    PrimaryKeyMixin,
-    RawPayloadMixin,
-    TimestampMixin,
+    StatusCodeMixin,
+    UpstreamStatusCodeMixin,
+    jsonb_object_default,
 )
 
 
-class _Gstr3BBase(PrimaryKeyMixin, ClientScopeMixin, MonthlyPeriodMixin, RawPayloadMixin, TimestampMixin, Base):
+class _Gstr3BBase(
+    BigIntPrimaryKeyMixin,
+    ClientForeignKeyMixin,
+    MonthlyPeriodMixin,
+    StatusCodeMixin,
+    UpstreamStatusCodeMixin,
+    FetchedUpdatedMixin,
+    Base,
+):
     __abstract__ = True
 
 
-class Gstr3BDetailsRecord(JsonRecordMixin, _Gstr3BBase):
-    __tablename__ = "gstr3b_details_records"
+class Gstr3BDetails(_Gstr3BBase):
+    __tablename__ = "gstr3b_details"
+    __table_args__ = (
+        UniqueConstraint("client_id", "year", "month", name="uq_gstr3b_details"),
+        Index("idx_gstr3b_details_period", "client_id", "year", "month"),
+    )
 
-    section: Mapped[str] = mapped_column(String(50), nullable=False)
-    subsection: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
-    line_code: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
-    line_label: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-
-    place_of_supply: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
-    transaction_type: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    transaction_description: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    liability_ledger_id: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
-
-    taxable_value: Mapped[Optional[Decimal]] = mapped_column(Amount, nullable=True)
-    igst: Mapped[Optional[Decimal]] = mapped_column(Amount, nullable=True)
-    cgst: Mapped[Optional[Decimal]] = mapped_column(Amount, nullable=True)
-    sgst: Mapped[Optional[Decimal]] = mapped_column(Amount, nullable=True)
-    cess: Mapped[Optional[Decimal]] = mapped_column(Amount, nullable=True)
-
-    tax: Mapped[Optional[Decimal]] = mapped_column(Amount, nullable=True)
-    interest: Mapped[Optional[Decimal]] = mapped_column(Amount, nullable=True)
-    fee: Mapped[Optional[Decimal]] = mapped_column(Amount, nullable=True)
-    penalty: Mapped[Optional[Decimal]] = mapped_column(Amount, nullable=True)
-    other: Mapped[Optional[Decimal]] = mapped_column(Amount, nullable=True)
-
-    inter_state_amount: Mapped[Optional[Decimal]] = mapped_column(Amount, nullable=True)
-    intra_state_amount: Mapped[Optional[Decimal]] = mapped_column(Amount, nullable=True)
-    event_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
-
-
-class Gstr3BAutoLiabilityRecord(JsonRecordMixin, _Gstr3BBase):
-    __tablename__ = "gstr3b_auto_liability_records"
-
-    section: Mapped[str] = mapped_column(String(50), nullable=False)
-    subsection: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
-    source_table: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
-    place_of_supply: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
-
-    taxable_value: Mapped[Optional[Decimal]] = mapped_column(Amount, nullable=True)
-    igst: Mapped[Optional[Decimal]] = mapped_column(Amount, nullable=True)
-    cgst: Mapped[Optional[Decimal]] = mapped_column(Amount, nullable=True)
-    sgst: Mapped[Optional[Decimal]] = mapped_column(Amount, nullable=True)
-    cess: Mapped[Optional[Decimal]] = mapped_column(Amount, nullable=True)
+    return_period: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
+    supply_details: Mapped[dict[str, Any]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=dict,
+        server_default=jsonb_object_default(),
+    )
+    inter_state_supplies: Mapped[dict[str, Any]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=dict,
+        server_default=jsonb_object_default(),
+    )
+    eligible_itc: Mapped[dict[str, Any]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=dict,
+        server_default=jsonb_object_default(),
+    )
+    inward_supplies: Mapped[dict[str, Any]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=dict,
+        server_default=jsonb_object_default(),
+    )
+    interest_and_late_fee: Mapped[dict[str, Any]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=dict,
+        server_default=jsonb_object_default(),
+    )
+    tax_payment: Mapped[dict[str, Any]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=dict,
+        server_default=jsonb_object_default(),
+    )
 
 
-__all__ = ["Gstr3BDetailsRecord", "Gstr3BAutoLiabilityRecord"]
+class Gstr3BAutoLiability(_Gstr3BBase):
+    __tablename__ = "gstr3b_auto_liability"
+    __table_args__ = (
+        UniqueConstraint("client_id", "year", "month", name="uq_gstr3b_auto_liability"),
+        Index("idx_gstr3b_auto_period", "client_id", "year", "month"),
+    )
+
+    auto_calculated_liability: Mapped[dict[str, Any]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=dict,
+        server_default=jsonb_object_default(),
+    )
+
+
+Gstr3BDetailsRecord = Gstr3BDetails
+Gstr3BAutoLiabilityRecord = Gstr3BAutoLiability
+
+
+__all__ = [
+    "Gstr3BDetails",
+    "Gstr3BAutoLiability",
+    "Gstr3BDetailsRecord",
+    "Gstr3BAutoLiabilityRecord",
+]

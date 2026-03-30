@@ -1,4 +1,3 @@
-from .models import GstReturnStatusRecord
+from .models import GstReturnStatus, GstReturnStatusRecord
 
-__all__ = ["GstReturnStatusRecord"]
-
+__all__ = ["GstReturnStatus", "GstReturnStatusRecord"]

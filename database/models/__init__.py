@@ -1,5 +1,4 @@
 from .client import Client
-from .session import GstSession
+from .session import ClientSession, GstSession, OtpRequest
 
-__all__ = ["Client", "GstSession"]
-
+__all__ = ["Client", "ClientSession", "GstSession", "OtpRequest"]

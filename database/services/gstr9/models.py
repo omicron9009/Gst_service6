@@ -1,89 +1,129 @@
 from __future__ import annotations
 
-from datetime import date
-from decimal import Decimal
-from typing import Optional
+from typing import Any, Optional
 
-from sqlalchemy import Boolean, Date, Integer, String
+from sqlalchemy import CheckConstraint, Index, Integer, Numeric, String, UniqueConstraint, text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ...core.base import (
-    Amount,
     Base,
-    ClientScopeMixin,
+    BigIntPrimaryKeyMixin,
+    ClientForeignKeyMixin,
+    FetchedUpdatedMixin,
     FinancialYearMixin,
-    JsonRecordMixin,
-    PrimaryKeyMixin,
-    Rate,
-    RawPayloadMixin,
-    TimestampMixin,
+    LargeAmount,
+    StatusCodeMixin,
+    UpstreamStatusCodeMixin,
+    jsonb_array_default,
+    jsonb_object_default,
 )
 
 
-class _Gstr9Base(PrimaryKeyMixin, ClientScopeMixin, FinancialYearMixin, RawPayloadMixin, TimestampMixin, Base):
+class _Gstr9Base(
+    BigIntPrimaryKeyMixin,
+    ClientForeignKeyMixin,
+    FinancialYearMixin,
+    StatusCodeMixin,
+    UpstreamStatusCodeMixin,
+    FetchedUpdatedMixin,
+    Base,
+):
     __abstract__ = True
 
 
-class _Gstr9LineMixin:
-    table_code: Mapped[Optional[str]] = mapped_column(String(20), nullable=True, index=True)
-    section_code: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
-    section_label: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+class Gstr9AutoCalculated(_Gstr9Base):
+    __tablename__ = "gstr9_auto_calculated"
+    __table_args__ = (
+        UniqueConstraint("client_id", "financial_year", name="uq_gstr9_auto_calculated"),
+        CheckConstraint(
+            r"financial_year ~ '^\d{4}-\d{2}$'",
+            name="ck_gstr9_auto_fy_format",
+        ),
+        Index("idx_gstr9_auto_fy", "client_id", "financial_year"),
+    )
 
-    supplier_gstin: Mapped[Optional[str]] = mapped_column(String(15), nullable=True)
-    filing_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
-    return_period: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
-
-    invoice_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
-    invoice_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True, index=True)
-    original_invoice_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
-    original_invoice_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
-    note_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
-    note_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
-    note_type: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
-    invoice_type: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
-    place_of_supply: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
-    reverse_charge: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
-
-    hsn_sac: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
-    description: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    is_concessional: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
-
-    tax_rate: Mapped[Optional[Decimal]] = mapped_column(Rate, nullable=True)
-    taxable_value: Mapped[Optional[Decimal]] = mapped_column(Amount, nullable=True)
-    invoice_value: Mapped[Optional[Decimal]] = mapped_column(Amount, nullable=True)
-    igst: Mapped[Optional[Decimal]] = mapped_column(Amount, nullable=True)
-    cgst: Mapped[Optional[Decimal]] = mapped_column(Amount, nullable=True)
-    sgst: Mapped[Optional[Decimal]] = mapped_column(Amount, nullable=True)
-    cess: Mapped[Optional[Decimal]] = mapped_column(Amount, nullable=True)
-
-    amount: Mapped[Optional[Decimal]] = mapped_column(Amount, nullable=True)
-    tax_payable: Mapped[Optional[Decimal]] = mapped_column(Amount, nullable=True)
-    paid_in_cash: Mapped[Optional[Decimal]] = mapped_column(Amount, nullable=True)
-    paid_via_igst_itc: Mapped[Optional[Decimal]] = mapped_column(Amount, nullable=True)
-    paid_via_cgst_itc: Mapped[Optional[Decimal]] = mapped_column(Amount, nullable=True)
-    paid_via_sgst_itc: Mapped[Optional[Decimal]] = mapped_column(Amount, nullable=True)
-    paid_via_cess_itc: Mapped[Optional[Decimal]] = mapped_column(Amount, nullable=True)
+    financial_period: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    aggregate_turnover: Mapped[Optional[float]] = mapped_column(LargeAmount, nullable=True)
+    hsn_min_length: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    table4_outward_supplies: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, nullable=True)
+    table5_exempt_nil_non_gst: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, nullable=True)
+    table6_itc_availed: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, nullable=True)
+    table8_itc_as_per_2b: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, nullable=True)
+    table9_tax_paid: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, nullable=True)
 
 
-class Gstr9AutoCalculatedRecord(_Gstr9LineMixin, JsonRecordMixin, _Gstr9Base):
-    __tablename__ = "gstr9_auto_calculated_records"
+class Gstr9Table8A(_Gstr9Base):
+    __tablename__ = "gstr9_table8a"
+    __table_args__ = (
+        UniqueConstraint("client_id", "financial_year", "file_number", name="uq_gstr9_table8a"),
+        CheckConstraint(
+            r"financial_year ~ '^\d{4}-\d{2}$'",
+            name="ck_gstr9_table8a_fy_format",
+        ),
+        Index("idx_gstr9_table8a_fy", "client_id", "financial_year"),
+    )
+
+    file_number: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="",
+        server_default=text("''"),
+    )
+    b2b: Mapped[list[Any]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=list,
+        server_default=jsonb_array_default(),
+    )
+    b2ba: Mapped[list[Any]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=list,
+        server_default=jsonb_array_default(),
+    )
+    cdn: Mapped[list[Any]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=list,
+        server_default=jsonb_array_default(),
+    )
+    summary_b2b_taxable_value: Mapped[Optional[float]] = mapped_column(Numeric(15, 2), nullable=True)
+    summary_b2b_igst: Mapped[Optional[float]] = mapped_column(Numeric(15, 2), nullable=True)
+    summary_b2b_cgst: Mapped[Optional[float]] = mapped_column(Numeric(15, 2), nullable=True)
+    summary_b2b_sgst: Mapped[Optional[float]] = mapped_column(Numeric(15, 2), nullable=True)
+    summary_b2b_cess: Mapped[Optional[float]] = mapped_column(Numeric(15, 2), nullable=True)
+    summary_b2b_invoice_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
 
-class Gstr9Table8ARecord(_Gstr9LineMixin, _Gstr9Base):
-    __tablename__ = "gstr9_table8a_records"
+class Gstr9Details(_Gstr9Base):
+    __tablename__ = "gstr9_details"
+    __table_args__ = (
+        UniqueConstraint("client_id", "financial_year", name="uq_gstr9_details"),
+        CheckConstraint(
+            r"financial_year ~ '^\d{4}-\d{2}$'",
+            name="ck_gstr9_details_fy_format",
+        ),
+    )
 
-    file_number: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    is_eligible: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
-    ineligibility_reason: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    detail_sections: Mapped[dict[str, Any]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=dict,
+        server_default=jsonb_object_default(),
+    )
 
 
-class Gstr9DetailsRecord(_Gstr9LineMixin, JsonRecordMixin, _Gstr9Base):
-    __tablename__ = "gstr9_details_records"
+Gstr9AutoCalculatedRecord = Gstr9AutoCalculated
+Gstr9Table8ARecord = Gstr9Table8A
+Gstr9DetailsRecord = Gstr9Details
 
 
 __all__ = [
+    "Gstr9AutoCalculated",
+    "Gstr9Table8A",
+    "Gstr9Details",
     "Gstr9AutoCalculatedRecord",
     "Gstr9Table8ARecord",
     "Gstr9DetailsRecord",
 ]
-

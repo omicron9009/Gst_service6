@@ -1,179 +1,237 @@
 from __future__ import annotations
 
-from datetime import date
-from decimal import Decimal
-from typing import Optional
+from typing import Any, Optional
 
-from sqlalchemy import Boolean, Date, Integer, String
+from sqlalchemy import CheckConstraint, Numeric, String, UniqueConstraint, Index, text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ...core.base import (
-    Amount,
     Base,
-    ClientScopeMixin,
+    BigIntPrimaryKeyMixin,
+    ClientForeignKeyMixin,
+    FetchedUpdatedMixin,
     MonthlyPeriodMixin,
-    PrimaryKeyMixin,
-    Rate,
-    RawPayloadMixin,
-    TaxAmountsMixin,
-    TimestampMixin,
+    UpstreamStatusCodeMixin,
+    jsonb_array_default,
 )
 
 
-class _Gstr2ABase(PrimaryKeyMixin, ClientScopeMixin, MonthlyPeriodMixin, RawPayloadMixin, TimestampMixin, Base):
+class _Gstr2ABase(
+    BigIntPrimaryKeyMixin,
+    ClientForeignKeyMixin,
+    MonthlyPeriodMixin,
+    UpstreamStatusCodeMixin,
+    FetchedUpdatedMixin,
+    Base,
+):
     __abstract__ = True
 
 
-class Gstr2AB2BRecord(TaxAmountsMixin, _Gstr2ABase):
-    __tablename__ = "gstr2a_b2b_records"
+class Gstr2AB2B(_Gstr2ABase):
+    __tablename__ = "gstr2a_b2b"
+    __table_args__ = (
+        UniqueConstraint("client_id", "year", "month", name="uq_gstr2a_b2b"),
+        Index("idx_gstr2a_b2b_period", "client_id", "year", "month"),
+    )
 
-    supplier_gstin: Mapped[Optional[str]] = mapped_column(String(15), nullable=True)
-    filing_status_gstr1: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
-    filing_status_gstr3b: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
-    supplier_filed_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
-    supplier_filing_period: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
-    invoice_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
-    invoice_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True, index=True)
-    invoice_type: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
-    invoice_value: Mapped[Optional[Decimal]] = mapped_column(Amount, nullable=True)
-    place_of_supply: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
-    reverse_charge: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
-    source_type: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
-    irn: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
-    irn_gen_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
-    item_number: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    records: Mapped[list[Any]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=list,
+        server_default=jsonb_array_default(),
+    )
 
 
-class Gstr2AB2BARecord(TaxAmountsMixin, _Gstr2ABase):
-    __tablename__ = "gstr2a_b2ba_records"
+class Gstr2AB2BA(_Gstr2ABase):
+    __tablename__ = "gstr2a_b2ba"
+    __table_args__ = (
+        UniqueConstraint(
+            "client_id",
+            "year",
+            "month",
+            "filter_counterparty_gstin",
+            name="uq_gstr2a_b2ba",
+        ),
+        CheckConstraint(
+            "filter_counterparty_gstin = '' OR LENGTH(filter_counterparty_gstin) = 15",
+            name="ck_gstr2a_b2ba_counterparty_len",
+        ),
+    )
 
-    supplier_gstin: Mapped[Optional[str]] = mapped_column(String(15), nullable=True)
-    filing_status_gstr1: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
-    filing_status_gstr3b: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
-    supplier_filed_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
-    supplier_filing_period: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
-    invoice_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
-    invoice_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True, index=True)
-    original_invoice_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
-    original_invoice_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
-    amendment_period: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
-    amendment_type_code: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
-    amendment_type: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
-    invoice_type: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
-    invoice_value: Mapped[Optional[Decimal]] = mapped_column(Amount, nullable=True)
-    place_of_supply: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
-    reverse_charge: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
-    item_number: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-
-
-class Gstr2ACDNRecord(TaxAmountsMixin, _Gstr2ABase):
-    __tablename__ = "gstr2a_cdn_records"
-
-    supplier_gstin: Mapped[Optional[str]] = mapped_column(String(15), nullable=True)
-    filing_status_gstr1: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
-    filing_status_gstr3b: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
-    supplier_filed_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
-    supplier_filing_period: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
-    note_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
-    note_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True, index=True)
-    note_type_code: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
-    note_type: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
-    invoice_type: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
-    note_value: Mapped[Optional[Decimal]] = mapped_column(Amount, nullable=True)
-    place_of_supply: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
-    reverse_charge: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
-    delete_flag: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
-    source_type: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
-    irn: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
-    irn_gen_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
-    item_number: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    filter_counterparty_gstin: Mapped[str] = mapped_column(
+        String(15),
+        nullable=False,
+        default="",
+        server_default=text("''"),
+    )
+    records: Mapped[list[Any]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=list,
+        server_default=jsonb_array_default(),
+    )
 
 
-class Gstr2ACDNARecord(TaxAmountsMixin, _Gstr2ABase):
-    __tablename__ = "gstr2a_cdna_records"
+class Gstr2ACDN(_Gstr2ABase):
+    __tablename__ = "gstr2a_cdn"
+    __table_args__ = (
+        UniqueConstraint(
+            "client_id",
+            "year",
+            "month",
+            "filter_counterparty_gstin",
+            "filter_from_date",
+            name="uq_gstr2a_cdn",
+        ),
+        CheckConstraint(
+            "filter_counterparty_gstin = '' OR LENGTH(filter_counterparty_gstin) = 15",
+            name="ck_gstr2a_cdn_counterparty_len",
+        ),
+        Index("idx_gstr2a_cdn_period", "client_id", "year", "month"),
+    )
 
-    supplier_gstin: Mapped[Optional[str]] = mapped_column(String(15), nullable=True)
-    filing_status_gstr1: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
-    note_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
-    note_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True, index=True)
-    original_note_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
-    original_note_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
-    note_type_code: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
-    note_type: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
-    invoice_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
-    invoice_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True, index=True)
-    invoice_type: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
-    note_value: Mapped[Optional[Decimal]] = mapped_column(Amount, nullable=True)
-    place_of_supply: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
-    reverse_charge: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
-    delete_flag: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
-    diff_percent: Mapped[Optional[Decimal]] = mapped_column(Rate, nullable=True)
-    pre_gst: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
-    item_number: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-
-
-class Gstr2ADocumentRecord(TaxAmountsMixin, _Gstr2ABase):
-    __tablename__ = "gstr2a_document_records"
-
-    section: Mapped[str] = mapped_column(String(20), nullable=False)
-    supplier_gstin: Mapped[Optional[str]] = mapped_column(String(15), nullable=True)
-    filing_status_gstr1: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
-    filing_status_gstr3b: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
-    supplier_filed_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
-    supplier_filing_period: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
-    invoice_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
-    invoice_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True, index=True)
-    original_invoice_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
-    original_invoice_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
-    amendment_period: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
-    amendment_type_code: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
-    amendment_type: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
-    note_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
-    note_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
-    note_type_code: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
-    note_type: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
-    invoice_type: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
-    invoice_value: Mapped[Optional[Decimal]] = mapped_column(Amount, nullable=True)
-    note_value: Mapped[Optional[Decimal]] = mapped_column(Amount, nullable=True)
-    place_of_supply: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
-    reverse_charge: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
-    delete_flag: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
-    source_type: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
-    irn: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
-    irn_gen_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
-    item_number: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    filter_counterparty_gstin: Mapped[str] = mapped_column(
+        String(15),
+        nullable=False,
+        default="",
+        server_default=text("''"),
+    )
+    filter_from_date: Mapped[str] = mapped_column(
+        String(10),
+        nullable=False,
+        default="",
+        server_default=text("''"),
+    )
+    records: Mapped[list[Any]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=list,
+        server_default=jsonb_array_default(),
+    )
 
 
-class Gstr2AISDRecord(_Gstr2ABase):
-    __tablename__ = "gstr2a_isd_records"
+class Gstr2ACDNA(_Gstr2ABase):
+    __tablename__ = "gstr2a_cdna"
+    __table_args__ = (
+        UniqueConstraint(
+            "client_id",
+            "year",
+            "month",
+            "filter_counterparty_gstin",
+            name="uq_gstr2a_cdna",
+        ),
+        CheckConstraint(
+            "filter_counterparty_gstin = '' OR LENGTH(filter_counterparty_gstin) = 15",
+            name="ck_gstr2a_cdna_counterparty_len",
+        ),
+    )
 
-    distributor_gstin: Mapped[Optional[str]] = mapped_column(String(15), nullable=True)
-    filing_status_gstr1: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
-    document_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
-    document_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True, index=True)
-    document_type_code: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
-    document_type: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
-    itc_eligible: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
-    igst: Mapped[Optional[Decimal]] = mapped_column(Amount, nullable=True)
-    cgst: Mapped[Optional[Decimal]] = mapped_column(Amount, nullable=True)
-    sgst: Mapped[Optional[Decimal]] = mapped_column(Amount, nullable=True)
-    cess: Mapped[Optional[Decimal]] = mapped_column(Amount, nullable=True)
+    filter_counterparty_gstin: Mapped[str] = mapped_column(
+        String(15),
+        nullable=False,
+        default="",
+        server_default=text("''"),
+    )
+    records: Mapped[list[Any]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=list,
+        server_default=jsonb_array_default(),
+    )
 
 
-class Gstr2ATDSRecord(_Gstr2ABase):
-    __tablename__ = "gstr2a_tds_records"
+class Gstr2ADocument(_Gstr2ABase):
+    __tablename__ = "gstr2a_document"
+    __table_args__ = (UniqueConstraint("client_id", "year", "month", name="uq_gstr2a_document"),)
 
-    deductor_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    deductor_gstin: Mapped[Optional[str]] = mapped_column(String(15), nullable=True)
-    recipient_gstin: Mapped[Optional[str]] = mapped_column(String(15), nullable=True)
-    return_period: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
-    deduction_base_amount: Mapped[Optional[Decimal]] = mapped_column(Amount, nullable=True)
-    igst: Mapped[Optional[Decimal]] = mapped_column(Amount, nullable=True)
-    cgst: Mapped[Optional[Decimal]] = mapped_column(Amount, nullable=True)
-    sgst: Mapped[Optional[Decimal]] = mapped_column(Amount, nullable=True)
+    b2b: Mapped[list[Any]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=list,
+        server_default=jsonb_array_default(),
+    )
+    b2ba: Mapped[list[Any]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=list,
+        server_default=jsonb_array_default(),
+    )
+    cdn: Mapped[list[Any]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=list,
+        server_default=jsonb_array_default(),
+    )
+    summary_all: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, nullable=True)
+    summary_pending_action: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, nullable=True)
+
+
+class Gstr2AISD(_Gstr2ABase):
+    __tablename__ = "gstr2a_isd"
+    __table_args__ = (
+        UniqueConstraint(
+            "client_id",
+            "year",
+            "month",
+            "filter_counterparty_gstin",
+            name="uq_gstr2a_isd",
+        ),
+        CheckConstraint(
+            "filter_counterparty_gstin = '' OR LENGTH(filter_counterparty_gstin) = 15",
+            name="ck_gstr2a_isd_counterparty_len",
+        ),
+    )
+
+    filter_counterparty_gstin: Mapped[str] = mapped_column(
+        String(15),
+        nullable=False,
+        default="",
+        server_default=text("''"),
+    )
+    records: Mapped[list[Any]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=list,
+        server_default=jsonb_array_default(),
+    )
+
+
+class Gstr2ATDS(_Gstr2ABase):
+    __tablename__ = "gstr2a_tds"
+    __table_args__ = (UniqueConstraint("client_id", "year", "month", name="uq_gstr2a_tds"),)
+
+    entry_count: Mapped[Optional[int]] = mapped_column(nullable=True)
+    grand_total_deduction_base: Mapped[Optional[float]] = mapped_column(Numeric(15, 2), nullable=True)
+    grand_total_igst: Mapped[Optional[float]] = mapped_column(Numeric(15, 2), nullable=True)
+    grand_total_cgst: Mapped[Optional[float]] = mapped_column(Numeric(15, 2), nullable=True)
+    grand_total_sgst: Mapped[Optional[float]] = mapped_column(Numeric(15, 2), nullable=True)
+    grand_total_tds_credit: Mapped[Optional[float]] = mapped_column(Numeric(15, 2), nullable=True)
+    tds_entries: Mapped[list[Any]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=list,
+        server_default=jsonb_array_default(),
+    )
+
+
+Gstr2AB2BRecord = Gstr2AB2B
+Gstr2AB2BARecord = Gstr2AB2BA
+Gstr2ACDNRecord = Gstr2ACDN
+Gstr2ACDNARecord = Gstr2ACDNA
+Gstr2ADocumentRecord = Gstr2ADocument
+Gstr2AISDRecord = Gstr2AISD
+Gstr2ATDSRecord = Gstr2ATDS
 
 
 __all__ = [
+    "Gstr2AB2B",
+    "Gstr2AB2BA",
+    "Gstr2ACDN",
+    "Gstr2ACDNA",
+    "Gstr2ADocument",
+    "Gstr2AISD",
+    "Gstr2ATDS",
     "Gstr2AB2BRecord",
     "Gstr2AB2BARecord",
     "Gstr2ACDNRecord",
@@ -182,4 +240,3 @@ __all__ = [
     "Gstr2AISDRecord",
     "Gstr2ATDSRecord",
 ]
-

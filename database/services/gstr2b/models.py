@@ -1,91 +1,98 @@
 from __future__ import annotations
 
-from datetime import date
-from decimal import Decimal
-from typing import Optional
+from typing import Any, Optional
 
-from sqlalchemy import Date, Integer, String
+from sqlalchemy import Boolean, CheckConstraint, Index, String, UniqueConstraint, text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ...core.base import (
-    Amount,
     Base,
-    ClientScopeMixin,
-    JsonRecordMixin,
+    BigIntPrimaryKeyMixin,
+    ClientForeignKeyMixin,
+    FetchedUpdatedMixin,
     MonthlyPeriodMixin,
-    PrimaryKeyMixin,
-    Rate,
-    RawPayloadMixin,
-    TimestampMixin,
+    UpstreamStatusCodeMixin,
 )
 
 
-class _Gstr2BBase(PrimaryKeyMixin, ClientScopeMixin, MonthlyPeriodMixin, RawPayloadMixin, TimestampMixin, Base):
+class _Gstr2BBase(
+    BigIntPrimaryKeyMixin,
+    ClientForeignKeyMixin,
+    UpstreamStatusCodeMixin,
+    FetchedUpdatedMixin,
+    Base,
+):
     __abstract__ = True
 
 
-class Gstr2BRecord(JsonRecordMixin, _Gstr2BBase):
-    __tablename__ = "gstr2b_records"
+class Gstr2B(_Gstr2BBase, MonthlyPeriodMixin):
+    __tablename__ = "gstr2b"
+    __table_args__ = (
+        UniqueConstraint("client_id", "year", "month", "file_number", name="uq_gstr2b"),
+        CheckConstraint(
+            "response_type IN ('summary', 'documents', 'pagination_required')",
+            name="ck_gstr2b_response_type",
+        ),
+        Index("idx_gstr2b_period", "client_id", "year", "month"),
+        Index(
+            "idx_gstr2b_summary_fetch",
+            "client_id",
+            "year",
+            "month",
+            postgresql_where=text("response_type = 'summary' AND file_number = ''"),
+        ),
+    )
 
-    status_cd: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
-    response_type: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
-    file_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    file_number: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    section: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
-
-    supplier_gstin: Mapped[Optional[str]] = mapped_column(String(15), nullable=True)
-    supplier_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    supplier_period: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
-    supplier_file_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
-
-    invoice_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
-    invoice_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True, index=True)
-    original_invoice_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
-    original_invoice_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
-
-    note_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
-    note_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
-    original_note_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
-    original_note_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
-    note_type: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
-    supply_type: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
-
-    document_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
-    document_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
-    document_type: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
-
-    place_of_supply: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
-    invoice_type: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
-    reverse_charge: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
-    itc_available: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
-    diff_percent: Mapped[Optional[Decimal]] = mapped_column(Rate, nullable=True)
-
-    taxable_value: Mapped[Optional[Decimal]] = mapped_column(Amount, nullable=True)
-    tax_rate: Mapped[Optional[Decimal]] = mapped_column(Rate, nullable=True)
-    invoice_value: Mapped[Optional[Decimal]] = mapped_column(Amount, nullable=True)
-    note_value: Mapped[Optional[Decimal]] = mapped_column(Amount, nullable=True)
-    igst: Mapped[Optional[Decimal]] = mapped_column(Amount, nullable=True)
-    cgst: Mapped[Optional[Decimal]] = mapped_column(Amount, nullable=True)
-    sgst: Mapped[Optional[Decimal]] = mapped_column(Amount, nullable=True)
-    cess: Mapped[Optional[Decimal]] = mapped_column(Amount, nullable=True)
-
-    source_type: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
-    ims_status: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
-    reason: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    irn: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
-    irn_gen_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
-    item_number: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    file_number: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="",
+        server_default=text("''"),
+    )
+    response_type: Mapped[str] = mapped_column(String(25), nullable=False)
+    return_period: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
+    gen_date: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
+    version: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    checksum: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    file_count: Mapped[Optional[int]] = mapped_column(nullable=True)
+    pagination_required: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=text("FALSE"),
+    )
+    counterparty_summary: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, nullable=True)
+    itc_summary: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, nullable=True)
+    b2b: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, nullable=True)
+    b2ba: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, nullable=True)
+    cdnr: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, nullable=True)
+    cdnra: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, nullable=True)
+    isd: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, nullable=True)
+    grand_summary: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, nullable=True)
 
 
-class Gstr2BRegenerationStatusRecord(_Gstr2BBase):
-    __tablename__ = "gstr2b_regeneration_status_records"
+class Gstr2BRegenStatus(_Gstr2BBase):
+    __tablename__ = "gstr2b_regen_status"
+    __table_args__ = (
+        UniqueConstraint("client_id", "reference_id", name="uq_gstr2b_regen_status"),
+    )
 
-    reference_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
-    regeneration_status: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
-    regeneration_status_label: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
-    error_code: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
-    error_message: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    reference_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    form_type_label: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    action: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    processing_status_label: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    has_errors: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+    error_report: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, nullable=True)
 
 
-__all__ = ["Gstr2BRecord", "Gstr2BRegenerationStatusRecord"]
+Gstr2BRecord = Gstr2B
+Gstr2BRegenerationStatusRecord = Gstr2BRegenStatus
 
+
+__all__ = [
+    "Gstr2B",
+    "Gstr2BRegenStatus",
+    "Gstr2BRecord",
+    "Gstr2BRegenerationStatusRecord",
+]
