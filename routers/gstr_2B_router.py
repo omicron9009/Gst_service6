@@ -1,9 +1,6 @@
-import requests
-from typing import Dict, Any, Optional
-from config import BASE_URL, API_KEY, API_VERSION
-from session_storage import get_session
+from typing import Optional
 from services.gstr_2B_service import *
-from fastapi import APIRouter , HTTPException, Query
+from fastapi import APIRouter, Query
 
 router = APIRouter(prefix="/gstr2B", tags=["gstr2B"])
 
@@ -23,12 +20,7 @@ def gstr2b(
         Call once without it to get file_count, then call again with
         file_number=1 through file_count to retrieve all invoice pages.
     """
-    result = get_gstr2b(gstin, year, month, file_number)
-
-    if not result.get("success"):
-        raise HTTPException(status_code=400, detail=result)
-
-    return result
+    return get_gstr2b(gstin, year, month, file_number)
 
 
 @router.get("/gstr2b/{gstin}/regenerate/status")
@@ -36,9 +28,4 @@ def gstr2b_regeneration_status(
     gstin: str,
     reference_id: str,
 ):
-    result = get_gstr2b_regeneration_status(gstin, reference_id)
-
-    if not result.get("success"):
-        raise HTTPException(status_code=400, detail=result)
-
-    return result
+    return get_gstr2b_regeneration_status(gstin, reference_id)
