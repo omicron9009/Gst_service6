@@ -40,6 +40,14 @@ async def fetch_all_business_tables(
         default=None,
         description="Optional subset of business tables to fetch.",
     ),
+    year: str | None = Query(
+        default=None,
+        description="Filter by year (e.g., '2026') - applies to monthly tables only.",
+    ),
+    month: str | None = Query(
+        default=None,
+        description="Filter by month (e.g., '01') - applies to monthly tables only.",
+    ),
     _: str = Depends(require_basic_auth),
     db: AsyncSession = Depends(get_db),
 ):
@@ -49,6 +57,8 @@ async def fetch_all_business_tables(
         client_ids=client_id,
         include_inactive=include_inactive,
         tables=tables,
+        year=year,
+        month=month,
     )
 
 

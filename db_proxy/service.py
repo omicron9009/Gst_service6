@@ -154,13 +154,22 @@ async def fetch_table_rows(
     *,
     table_name: str,
     client_ids: list[int],
+    year: str | None = None,
+    month: str | None = None,
 ) -> list[dict[str, Any]]:
     table = database.Base.metadata.tables[table_name]
     stmt: Select[Any] = (
         select(table)
         .where(table.c.client_id.in_(client_ids))
-        .order_by(table.c.client_id.asc(), table.c.id.asc())
     )
+
+    # Add year/month filters if table has those columns
+    if year is not None and "year" in table.c:
+        stmt = stmt.where(table.c.year == year)
+    if month is not None and "month" in table.c:
+        stmt = stmt.where(table.c.month == month)
+
+    stmt = stmt.order_by(table.c.client_id.asc(), table.c.id.asc())
     result = await session.execute(stmt)
     return [make_json_safe(dict(row)) for row in result.mappings().all()]
 
@@ -172,6 +181,8 @@ async def fetch_business_dataset(
     client_ids: list[int] | None,
     include_inactive: bool,
     tables: list[str] | None,
+    year: str | None = None,
+    month: str | None = None,
 ) -> dict[str, Any]:
     normalized_gstins = normalize_gstins(gstins)
     selected_tables = resolve_requested_tables(tables)
@@ -189,6 +200,8 @@ async def fetch_business_dataset(
                 "client_ids": client_ids or [],
                 "include_inactive": include_inactive,
                 "tables": selected_tables,
+                "year": year,
+                "month": month,
             },
             "excluded_tables": sorted(EXCLUDED_TABLES),
             "summary": {
@@ -219,7 +232,13 @@ async def fetch_business_dataset(
     total_rows = 0
 
     for table_name in selected_tables:
-        rows = await fetch_table_rows(session, table_name=table_name, client_ids=client_id_list)
+        rows = await fetch_table_rows(
+            session,
+            table_name=table_name,
+            client_ids=client_id_list,
+            year=year,
+            month=month,
+        )
         grouped_rows: dict[int, list[dict[str, Any]]] = defaultdict(list)
         for row in rows:
             grouped_rows[int(row["client_id"])].append(row)
@@ -240,6 +259,8 @@ async def fetch_business_dataset(
             "client_ids": client_ids or [],
             "include_inactive": include_inactive,
             "tables": selected_tables,
+            "year": year,
+            "month": month,
         },
         "excluded_tables": sorted(EXCLUDED_TABLES),
         "summary": {
