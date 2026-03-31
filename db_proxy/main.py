@@ -8,7 +8,7 @@ from database.core.database import get_db
 
 from .config import settings
 from .security import require_basic_auth
-from .service import fetch_business_dataset
+from .service import fetch_business_dataset, fetch_available_periods
 
 
 app = FastAPI(title="GST DB Proxy", version="1.0.0")
@@ -50,6 +50,18 @@ async def fetch_all_business_tables(
         include_inactive=include_inactive,
         tables=tables,
     )
+
+
+@app.get("/available-periods")
+async def get_available_periods(
+    gstin: list[str] | None = Query(
+        default=None,
+        description="Repeat this query param to filter one or more GSTINs.",
+    ),
+    _: str = Depends(require_basic_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    return await fetch_available_periods(db, gstins=gstin)
 
 
 if __name__ == "__main__":

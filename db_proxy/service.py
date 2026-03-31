@@ -250,3 +250,68 @@ async def fetch_business_dataset(
         "table_row_counts": table_row_counts,
         "clients": list(clients_by_id.values()),
     }
+
+
+async def fetch_available_periods(
+    session: AsyncSession,
+    *,
+    gstins: list[str] | None,
+) -> dict[str, Any]:
+    """Fetch all available year/month periods from GSTR tables for given GSTINs."""
+    from sqlalchemy import func, distinct
+
+    normalized_gstins = normalize_gstins(gstins)
+
+    if not normalized_gstins:
+        return {"periods": []}
+
+    # Get client IDs for the given GSTINs
+    client_stmt = select(Client.id).where(Client.gstin.in_(normalized_gstins))
+    client_result = await session.execute(client_stmt)
+    client_ids = [row[0] for row in client_result.all()]
+
+    if not client_ids:
+        return {"periods": []}
+
+    periods_set: set[tuple[str, str]] = set()
+
+    # Query monthly tables (GSTR1, GSTR2A, GSTR2B) for year/month
+    monthly_tables = [
+        "gstr1_advance_tax", "gstr1_b2b", "gstr1_summary", "gstr1_b2csa",
+        "gstr1_b2cs", "gstr1_cdnr", "gstr1_doc_issue", "gstr1_hsn",
+        "gstr1_nil", "gstr1_b2cl", "gstr1_cdnur", "gstr1_exp", "gstr1_txp",
+        "gstr2a_b2b", "gstr2a_b2ba", "gstr2a_cdn", "gstr2a_cdna",
+        "gstr2a_document", "gstr2a_isd", "gstr2a_tds",
+        "gstr2b", "gstr2b_regen_status",
+    ]
+
+    for table_name in monthly_tables:
+        if table_name not in database.Base.metadata.tables:
+            continue
+
+        table = database.Base.metadata.tables[table_name]
+
+        # Check if table has year and month columns
+        if "year" not in table.c or "month" not in table.c:
+            continue
+
+        stmt = select(
+            distinct(table.c.year),
+            distinct(table.c.month),
+        ).where(table.c.client_id.in_(client_ids))
+
+        result = await session.execute(stmt)
+        for row in result.all():
+            year, month = row
+            if year and month:
+                periods_set.add((str(year), str(month)))
+
+    # Sort periods by year then month
+    periods = sorted(periods_set)
+
+    return {
+        "periods": [
+            {"year": year, "month": month}
+            for year, month in periods
+        ]
+    }
