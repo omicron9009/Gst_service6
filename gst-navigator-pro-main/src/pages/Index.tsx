@@ -1,4 +1,3 @@
-import { useEffect } from 'react';
 import { useApp } from '@/context/AppContext';
 import { useDbProxy } from '@/hooks/useDbProxy';
 import { PeriodIndicator } from '@/components/dashboard/PeriodIndicator';
@@ -27,13 +26,7 @@ const ALL_SECTIONS = [
 
 export default function Index() {
   const { activeClient } = useApp();
-  const { refreshData } = useDbProxy();
-
-  useEffect(() => {
-    if (activeClient?.gstin) {
-      refreshData(activeClient.gstin);
-    }
-  }, [activeClient?.gstin]); // eslint-disable-line react-hooks/exhaustive-deps
+  const { loading } = useDbProxy();
 
   return (
     <div className="flex h-screen w-full overflow-hidden">
@@ -52,6 +45,11 @@ export default function Index() {
             ) : (
               <>
                 <PeriodIndicator />
+                {loading && (
+                  <div className="mt-6 text-center text-sm text-muted-foreground">
+                    Loading period data...
+                  </div>
+                )}
                 <div className="mt-6">
                   <Accordion type="multiple" defaultValue={ALL_SECTIONS} className="space-y-0">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3">GSTR-1</h3>
