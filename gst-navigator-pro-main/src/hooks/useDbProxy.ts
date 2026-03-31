@@ -118,12 +118,19 @@ export function useDbProxy() {
     loadPeriods();
   }, [activeClient?.gstin, dispatch]);
 
-  const refreshData = useCallback(async (gstin?: string) => {
+  // Refetch data when selected period changes
+  useEffect(() => {
+    if (!activeClient?.gstin || !state.selectedPeriod) return;
+
+    refreshData(activeClient.gstin, state.selectedPeriod.year, state.selectedPeriod.month);
+  }, [activeClient?.gstin, state.selectedPeriod, refreshData]);
+
+  const refreshData = useCallback(async (gstin?: string, year?: string, month?: string) => {
     const g = gstin || activeClient?.gstin;
     if (!g) return;
     dispatch({ type: 'SET_DB_LOADING', payload: true });
     try {
-      const response = await dbProxyFetch(g);
+      const response = await dbProxyFetch(g, undefined, year, month);
 
       // Transform db_proxy response from nested structure to flat table structure
       const transformedData: Record<string, any[]> = {};

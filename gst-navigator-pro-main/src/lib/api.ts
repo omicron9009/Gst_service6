@@ -39,7 +39,7 @@ export async function servicePost(path: string, body: any, token?: string | null
 
 // --- DB Proxy calls ---
 
-export async function dbProxyFetch(gstin?: string | string[], tables?: string[]): Promise<Record<string, any[]>> {
+export async function dbProxyFetch(gstin?: string | string[], tables?: string[], year?: string, month?: string): Promise<Record<string, any[]>> {
   const settings = getSettings();
   const params = new URLSearchParams();
   if (gstin) {
@@ -48,6 +48,12 @@ export async function dbProxyFetch(gstin?: string | string[], tables?: string[])
   }
   if (tables) {
     tables.forEach(t => params.append('tables', t));
+  }
+  if (year) {
+    params.append('year', year);
+  }
+  if (month) {
+    params.append('month', month);
   }
   const creds = btoa(`${settings.dbProxyUser}:${settings.dbProxyPass}`);
   const res = await fetch(`${settings.dbProxyUrl}/fetch?${params.toString()}`, {
