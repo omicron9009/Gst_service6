@@ -24,6 +24,20 @@ from typing import Dict, Any, Optional
 from config import BASE_URL, API_KEY, API_VERSION
 from session_storage import get_session
 
+# Persistence
+from database.core.database import get_sync_db
+from database.models.client import Client
+from database.services.gstr2a.models import Gstr2AB2B
+
+
+def _get_or_create_client(gstin: str, session) -> Client:
+    client = session.query(Client).filter(Client.gstin == gstin).first()
+    if not client:
+        client = Client(gstin=gstin, username="", is_active=True)
+        session.add(client)
+        session.flush()
+    return client
+
 
 def get_gstr2a_b2b(gstin: str, year: str, month: str) -> Dict[str, Any]:
     """
@@ -56,11 +70,9 @@ def get_gstr2a_b2b(gstin: str, year: str, month: str) -> Dict[str, Any]:
             "error": str(e),
         }
 
-    b2b_data = (
-        payload.get("data", {})
-               .get("data", {})
-               .get("b2b", [])
-    )
+    outer = payload.get("data", {})
+    status_cd = str(outer.get("status_cd", ""))
+    b2b_data = outer.get("data", {}).get("b2b", [])
 
     interpreted = []
     for entry in b2b_data:
@@ -71,17 +83,35 @@ def get_gstr2a_b2b(gstin: str, year: str, month: str) -> Dict[str, Any]:
         filing_period = entry.get("flprdr1")
 
         for inv in entry.get("inv", []):
+            total_taxable = 0.0
+            total_igst = 0.0
+            total_cgst = 0.0
+            total_sgst = 0.0
+            total_cess = 0.0
+
             items = []
             for item in inv.get("itms", []):
                 det = item.get("itm_det", {})
+                txval = det.get("txval") or 0.0
+                igst = det.get("iamt") or 0.0
+                cgst = det.get("camt") or 0.0
+                sgst = det.get("samt") or 0.0
+                cess = det.get("csamt") or 0.0
+
+                total_taxable += txval
+                total_igst += igst
+                total_cgst += cgst
+                total_sgst += sgst
+                total_cess += cess
+
                 items.append({
                     "item_number": item.get("num"),
                     "tax_rate": det.get("rt"),
-                    "taxable_value": det.get("txval"),
-                    "igst": det.get("iamt"),
-                    "cgst": det.get("camt"),
-                    "sgst": det.get("samt"),
-                    "cess": det.get("csamt"),
+                    "taxable_value": txval,
+                    "igst": igst,
+                    "cgst": cgst,
+                    "sgst": sgst,
+                    "cess": cess,
                 })
 
             interpreted.append({
@@ -99,11 +129,17 @@ def get_gstr2a_b2b(gstin: str, year: str, month: str) -> Dict[str, Any]:
                 "source_type": inv.get("srctyp"),
                 "irn": inv.get("irn"),
                 "irn_gen_date": inv.get("irngendate"),
+                "taxable_value": total_taxable,
+                "igst": total_igst,
+                "cgst": total_cgst,
+                "sgst": total_sgst,
+                "cess": total_cess,
                 "items": items,
             })
 
-    return {
+    result = {
         "success": True,
+        "status_cd": status_cd,
         "request": {
             "gstin": gstin,
             "year": year,
@@ -114,6 +150,44 @@ def get_gstr2a_b2b(gstin: str, year: str, month: str) -> Dict[str, Any]:
         "records": interpreted,
         "raw": payload
     }
+
+    # Persist to DB
+    try:
+        db_session = get_sync_db()
+        try:
+            client = _get_or_create_client(gstin, db_session)
+
+            existing = db_session.query(Gstr2AB2B).filter(
+                Gstr2AB2B.client_id == client.id,
+                Gstr2AB2B.year == year,
+                Gstr2AB2B.month == month,
+            ).first()
+
+            if existing:
+                existing.records = interpreted
+                existing.upstream_status_code = response.status_code
+                existing.status_cd = status_cd
+            else:
+                record = Gstr2AB2B(
+                    client_id=client.id,
+                    year=year,
+                    month=month,
+                    records=interpreted,
+                    upstream_status_code=response.status_code,
+                    status_cd=status_cd,
+                )
+                db_session.add(record)
+
+            db_session.commit()
+        except Exception as db_error:
+            db_session.rollback()
+            print(f"Database error saving GSTR2A B2B: {db_error}")
+        finally:
+            db_session.close()
+    except Exception as e:
+        print(f"Failed to get database session for GSTR2A B2B: {e}")
+
+    return result
 
 def get_gstr2a_b2ba(gstin: str, year: str, month: str, counterparty_gstin: str = None) -> Dict[str, Any]:
     """

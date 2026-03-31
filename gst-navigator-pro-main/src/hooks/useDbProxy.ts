@@ -14,7 +14,8 @@ const NESTED_ARRAY_KEYS: Record<string, string> = {
   'gstr1_hsn': 'records',
   'gstr1_doc_issue': 'records',
   'gstr1_b2cl': 'records',
-  'gstr1_txp': 'txpd',
+  // TXP rows are stored under the column 'records' in DB; map accordingly
+  'gstr1_txp': 'records',
   'gstr1_advance_tax': 'records',
   'gstr1_summary': 'sections',
   'gstr2a_b2b': 'records',

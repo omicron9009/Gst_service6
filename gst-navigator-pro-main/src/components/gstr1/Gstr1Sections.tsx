@@ -22,6 +22,26 @@ export function Gstr1Sections() {
   const at = getData('gstr1_advance_tax');
   const txp = getData('gstr1_txp');
 
+  // Flatten TXP rows for display; pick first item rate/advance and use totals for sums.
+  const txpRows = txp.map((row: any) => {
+    const firstItem = (row.items && row.items[0]) || {};
+    const totals = row.totals || {};
+    return {
+      pos: row.pos,
+      flag: row.flag,
+      supply_type: row.supply_type,
+      action_required: row.action_required,
+      tax_rate: firstItem.tax_rate,
+      advance_amount: firstItem.advance_amount,
+      cgst: totals.cgst,
+      sgst: totals.sgst,
+      igst: totals.igst,
+      cess: totals.cess,
+      total_tax: totals.total_tax,
+      checksum: row.checksum,
+    };
+  });
+
   return (
     <>
       <DashboardSection id="gstr1-summary" title="GSTR-1 Summary" loading={loading}>
@@ -223,8 +243,21 @@ export function Gstr1Sections() {
               <>
                 <h4 className="text-xs font-semibold uppercase text-muted-foreground">Tax Payment (TXP)</h4>
                 <DataTable
-                  columns={Object.keys(txp[0] || {}).map(k => ({ key: k, label: k.replace(/_/g, ' ') }))}
-                  data={txp}
+                  columns={[
+                    { key: 'pos', label: 'POS' },
+                    { key: 'flag', label: 'Flag' },
+                    { key: 'supply_type', label: 'Supply Type' },
+                    { key: 'action_required', label: 'Action Required' },
+                    { key: 'tax_rate', label: 'Rate', type: 'number' },
+                    { key: 'advance_amount', label: 'Advance Amount', type: 'currency' },
+                    { key: 'cgst', label: 'CGST', type: 'currency' },
+                    { key: 'sgst', label: 'SGST', type: 'currency' },
+                    { key: 'igst', label: 'IGST', type: 'currency' },
+                    { key: 'cess', label: 'Cess', type: 'currency' },
+                    { key: 'total_tax', label: 'Total Tax', type: 'currency' },
+                    { key: 'checksum', label: 'Checksum', width: '240px' },
+                  ]}
+                  data={txpRows}
                 />
               </>
             )}

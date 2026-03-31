@@ -1697,7 +1697,7 @@ def get_gstr1_txp(gstin: str, year: str, month: str, counterparty_gstin: Optiona
     grand_sgst    = sum(e["totals"]["sgst"]           for e in txpd_entries)
     grand_cess    = sum(e["totals"]["cess"]            for e in txpd_entries)
 
-    return {
+    result = {
         "success":      True,
         "status_cd":    status_cd,
 
@@ -1717,3 +1717,51 @@ def get_gstr1_txp(gstin: str, year: str, month: str, counterparty_gstin: Optiona
 
         "raw": payload,
     }
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # PERSIST TO DATABASE (TXP)
+    # ─────────────────────────────────────────────────────────────────────────
+    try:
+        db_session = get_sync_db()
+        try:
+            client = get_or_create_client(gstin, db_session)
+
+            filter_cparty = counterparty_gstin or ""
+            filter_action = action_required or ""
+            filter_from   = from_date or ""
+
+            existing = db_session.query(Gstr1TXP).filter(
+                Gstr1TXP.client_id == client.id,
+                Gstr1TXP.year == year,
+                Gstr1TXP.month == month,
+                Gstr1TXP.filter_counterparty_gstin == filter_cparty,
+                Gstr1TXP.filter_action_required == filter_action,
+                Gstr1TXP.filter_from_date == filter_from,
+            ).first()
+
+            if existing:
+                existing.records = txpd_entries
+                existing.upstream_status_code = response.status_code
+            else:
+                txp_record = Gstr1TXP(
+                    client_id=client.id,
+                    year=year,
+                    month=month,
+                    filter_counterparty_gstin=filter_cparty,
+                    filter_action_required=filter_action,
+                    filter_from_date=filter_from,
+                    records=txpd_entries,
+                    upstream_status_code=response.status_code,
+                )
+                db_session.add(txp_record)
+
+            db_session.commit()
+        except Exception as db_error:
+            db_session.rollback()
+            print(f"Database error saving GSTR1 TXP: {db_error}")
+        finally:
+            db_session.close()
+    except Exception as e:
+        print(f"Failed to get database session for TXP: {e}")
+
+    return result

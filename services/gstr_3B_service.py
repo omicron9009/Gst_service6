@@ -3,6 +3,20 @@ from typing import Dict, Any, Optional
 from config import BASE_URL, API_KEY, API_VERSION
 from session_storage import get_session
 
+# Persistence
+from database.core.database import get_sync_db
+from database.models.client import Client
+from database.services.gstr3b.models import Gstr3BDetails, Gstr3BAutoLiability
+
+
+def _get_or_create_client(gstin: str, session) -> Client:
+    client = session.query(Client).filter(Client.gstin == gstin).first()
+    if not client:
+        client = Client(gstin=gstin, username="", is_active=True)
+        session.add(client)
+        session.flush()
+    return client
+
 
 
 
@@ -194,7 +208,7 @@ def get_gstr3b_details(gstin: str, year: str, month: str) -> Dict[str, Any]:
         "cess_from_cess":      pditc.get("cs_pdcs", 0) or 0.0,
     }
 
-    return {
+    result = {
         "success":        True,
         "status_cd":      status_cd,
         "gstin":          inner.get("gstin"),
@@ -212,6 +226,58 @@ def get_gstr3b_details(gstin: str, year: str, month: str) -> Dict[str, Any]:
         },
         "raw": payload,
     }
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # PERSIST TO DATABASE (GSTR-3B DETAILS)
+    # ─────────────────────────────────────────────────────────────────────────
+    try:
+        db_session = get_sync_db()
+        try:
+            client = _get_or_create_client(gstin, db_session)
+
+            existing = db_session.query(Gstr3BDetails).filter(
+                Gstr3BDetails.client_id == client.id,
+                Gstr3BDetails.year == year,
+                Gstr3BDetails.month == month,
+            ).first()
+
+            if existing:
+                existing.return_period = result.get("return_period")
+                existing.supply_details = supply_details
+                existing.inter_state_supplies = inter_state_supplies
+                existing.eligible_itc = itc_eligible
+                existing.inward_supplies = {"rows": inward_supplies}
+                existing.interest_and_late_fee = interest_late_fee
+                existing.tax_payment = result.get("tax_payment")
+                existing.upstream_status_code = response.status_code
+                existing.status_cd = status_cd
+            else:
+                record = Gstr3BDetails(
+                    client_id=client.id,
+                    year=year,
+                    month=month,
+                    return_period=result.get("return_period"),
+                    supply_details=supply_details,
+                    inter_state_supplies=inter_state_supplies,
+                    eligible_itc=itc_eligible,
+                    inward_supplies={"rows": inward_supplies},
+                    interest_and_late_fee=interest_late_fee,
+                    tax_payment=result.get("tax_payment"),
+                    upstream_status_code=response.status_code,
+                    status_cd=status_cd,
+                )
+                db_session.add(record)
+
+            db_session.commit()
+        except Exception as db_error:
+            db_session.rollback()
+            print(f"Database error saving GSTR3B Details: {db_error}")
+        finally:
+            db_session.close()
+    except Exception as e:
+        print(f"Failed to get database session for GSTR3B Details: {e}")
+
+    return result
 
 
 
@@ -306,7 +372,7 @@ def get_gstr3b_auto_liability(gstin: str, year: str, month: str) -> Dict[str, An
             "subtotal": _tax_block(section.get("subtotal", {})),
         }
 
-    return {
+    result = {
         "success":      True,
         "status_cd":    status_cd,
         "gstin":        liabitc.get("gstin"),
@@ -343,5 +409,47 @@ def get_gstr3b_auto_liability(gstin: str, year: str, month: str) -> Dict[str, An
 
         "raw": payload,
     }
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # PERSIST TO DATABASE (GSTR-3B AUTO LIABILITY)
+    # ─────────────────────────────────────────────────────────────────────────
+    try:
+        db_session = get_sync_db()
+        try:
+            client = _get_or_create_client(gstin, db_session)
+
+            existing = db_session.query(Gstr3BAutoLiability).filter(
+                Gstr3BAutoLiability.client_id == client.id,
+                Gstr3BAutoLiability.year == year,
+                Gstr3BAutoLiability.month == month,
+            ).first()
+
+            payload_to_store = {**result}
+
+            if existing:
+                existing.auto_calculated_liability = payload_to_store
+                existing.upstream_status_code = response.status_code
+                existing.status_cd = status_cd
+            else:
+                record = Gstr3BAutoLiability(
+                    client_id=client.id,
+                    year=year,
+                    month=month,
+                    auto_calculated_liability=payload_to_store,
+                    upstream_status_code=response.status_code,
+                    status_cd=status_cd,
+                )
+                db_session.add(record)
+
+            db_session.commit()
+        except Exception as db_error:
+            db_session.rollback()
+            print(f"Database error saving GSTR3B Auto Liability: {db_error}")
+        finally:
+            db_session.close()
+    except Exception as e:
+        print(f"Failed to get database session for GSTR3B Auto Liability: {e}")
+
+    return result
 
 

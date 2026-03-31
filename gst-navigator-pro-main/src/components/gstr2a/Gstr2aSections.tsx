@@ -16,28 +16,67 @@ export function Gstr2aSections() {
   const isd = getData('gstr2a_isd');
   const tds = getData('gstr2a_tds');
 
+  const itemRows = [...b2b, ...b2ba].flatMap((inv: any) => (
+    Array.isArray(inv.items) ? inv.items.map((item: any) => ({
+      supplier_gstin: inv.supplier_gstin,
+      invoice_number: inv.invoice_number,
+      invoice_date: inv.invoice_date,
+      invoice_value: inv.invoice_value,
+      item_number: item.item_number,
+      tax_rate: item.tax_rate,
+      taxable_value: item.taxable_value,
+      igst: item.igst,
+      cgst: item.cgst,
+      sgst: item.sgst,
+      cess: item.cess,
+    })) : []
+  ));
+
   return (
     <>
       <DashboardSection id="gstr2a-b2b" title="GSTR-2A B2B / B2BA" loading={loading}>
         {b2b.length === 0 && b2ba.length === 0 ? <EmptyState /> : (
-          <DataTable
-            columns={[
-              { key: 'supplier_gstin', label: 'Supplier GSTIN', width: '160px' },
-              { key: 'filing_status_gstr1', label: 'Filing Status' },
-              { key: 'invoice_number', label: 'Invoice No' },
-              { key: 'invoice_date', label: 'Invoice Date' },
-              { key: 'invoice_type', label: 'Type' },
-              { key: 'invoice_value', label: 'Invoice Value', type: 'currency' },
-              { key: 'place_of_supply', label: 'POS' },
-              { key: 'reverse_charge', label: 'RC' },
-              { key: 'taxable_value', label: 'Taxable Value', type: 'currency' },
-              { key: 'igst', label: 'IGST', type: 'currency' },
-              { key: 'cgst', label: 'CGST', type: 'currency' },
-              { key: 'sgst', label: 'SGST', type: 'currency' },
-              { key: 'cess', label: 'Cess', type: 'currency' },
-            ]}
-            data={[...b2b, ...b2ba]}
-          />
+          <>
+            <DataTable
+              columns={[
+                { key: 'supplier_gstin', label: 'Supplier GSTIN', width: '160px' },
+                { key: 'filing_status_gstr1', label: 'Filing Status' },
+                { key: 'invoice_number', label: 'Invoice No' },
+                { key: 'invoice_date', label: 'Invoice Date' },
+                { key: 'invoice_type', label: 'Type' },
+                { key: 'invoice_value', label: 'Invoice Value', type: 'currency' },
+                { key: 'place_of_supply', label: 'POS' },
+                { key: 'reverse_charge', label: 'RC' },
+                { key: 'taxable_value', label: 'Taxable Value', type: 'currency' },
+                { key: 'igst', label: 'IGST', type: 'currency' },
+                { key: 'cgst', label: 'CGST', type: 'currency' },
+                { key: 'sgst', label: 'SGST', type: 'currency' },
+                { key: 'cess', label: 'Cess', type: 'currency' },
+              ]}
+              data={[...b2b, ...b2ba]}
+            />
+
+            {itemRows.length > 0 && (
+              <div className="mt-4">
+                <h4 className="text-xs font-semibold uppercase text-muted-foreground mb-2">Items (B2B/B2BA)</h4>
+                <DataTable
+                  columns={[
+                    { key: 'supplier_gstin', label: 'Supplier GSTIN', width: '160px' },
+                    { key: 'invoice_number', label: 'Invoice No' },
+                    { key: 'invoice_date', label: 'Invoice Date' },
+                    { key: 'item_number', label: 'Item #' },
+                    { key: 'tax_rate', label: 'Rate %' },
+                    { key: 'taxable_value', label: 'Taxable', type: 'currency' },
+                    { key: 'igst', label: 'IGST', type: 'currency' },
+                    { key: 'cgst', label: 'CGST', type: 'currency' },
+                    { key: 'sgst', label: 'SGST', type: 'currency' },
+                    { key: 'cess', label: 'Cess', type: 'currency' },
+                  ]}
+                  data={itemRows}
+                />
+              </div>
+            )}
+          </>
         )}
       </DashboardSection>
 

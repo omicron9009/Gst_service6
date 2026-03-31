@@ -3,6 +3,20 @@ from typing import Dict, Any, Optional
 from config import BASE_URL, API_KEY, API_VERSION
 from session_storage import get_session
 
+# Persistence
+from database.core.database import get_sync_db
+from database.models.client import Client
+from database.services.gstr9.models import Gstr9AutoCalculated, Gstr9Details, Gstr9Table8A
+
+
+def _get_or_create_client(gstin: str, session) -> Client:
+    client = session.query(Client).filter(Client.gstin == gstin).first()
+    if not client:
+        client = Client(gstin=gstin, username="", is_active=True)
+        session.add(client)
+        session.flush()
+    return client
+
 
 def get_gstr9_auto_calculated(gstin: str, financial_year: str) -> Dict[str, Any]:
 
@@ -144,7 +158,7 @@ def get_gstr9_auto_calculated(gstin: str, financial_year: str) -> Dict[str, Any]
         },
     }
 
-    return {
+    result = {
         "success":          True,
         "status_cd":        status_cd,
         "gstin":            inner.get("gstin"),
@@ -158,6 +172,58 @@ def get_gstr9_auto_calculated(gstin: str, financial_year: str) -> Dict[str, Any]
         "table9_tax_paid":                  table9,
         "raw": payload,
     }
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Persist to DB
+    # ─────────────────────────────────────────────────────────────────────────
+    try:
+        db_session = get_sync_db()
+        try:
+            client = _get_or_create_client(gstin, db_session)
+
+            existing = db_session.query(Gstr9AutoCalculated).filter(
+                Gstr9AutoCalculated.client_id == client.id,
+                Gstr9AutoCalculated.financial_year == financial_year,
+            ).first()
+
+            if existing:
+                existing.financial_period = result.get("financial_period")
+                existing.aggregate_turnover = result.get("aggregate_turnover")
+                existing.hsn_min_length = result.get("hsn_min_length")
+                existing.table4_outward_supplies = table4
+                existing.table5_exempt_nil_non_gst = table5
+                existing.table6_itc_availed = table6
+                existing.table8_itc_as_per_2b = table8
+                existing.table9_tax_paid = table9
+                existing.upstream_status_code = response.status_code
+                existing.status_cd = status_cd
+            else:
+                record = Gstr9AutoCalculated(
+                    client_id=client.id,
+                    financial_year=financial_year,
+                    financial_period=result.get("financial_period"),
+                    aggregate_turnover=result.get("aggregate_turnover"),
+                    hsn_min_length=result.get("hsn_min_length"),
+                    table4_outward_supplies=table4,
+                    table5_exempt_nil_non_gst=table5,
+                    table6_itc_availed=table6,
+                    table8_itc_as_per_2b=table8,
+                    table9_tax_paid=table9,
+                    upstream_status_code=response.status_code,
+                    status_cd=status_cd,
+                )
+                db_session.add(record)
+
+            db_session.commit()
+        except Exception as db_error:
+            db_session.rollback()
+            print(f"Database error saving GSTR9 auto-calculated: {db_error}")
+        finally:
+            db_session.close()
+    except Exception as e:
+        print(f"Failed to get database session for GSTR9 auto-calculated: {e}")
+
+    return result
 
 
 def _parse_invoice(doc: dict) -> Dict[str, Any]:
@@ -263,7 +329,7 @@ def get_gstr9_table8a(gstin: str, financial_year: str, file_number: Optional[str
                 totals["invoice_count"] += 1
         return totals
 
-    return {
+    result = {
         "success":        True,
         "status_cd":      status_cd,
         "gstin":          inner.get("gstin"),
@@ -279,6 +345,62 @@ def get_gstr9_table8a(gstin: str, financial_year: str, file_number: Optional[str
         },
         "raw": payload,
     }
+
+    # Ensure file number is always a usable string key
+    file_number_value = str(doc_id or file_number or "1")
+    result["file_number"] = file_number_value
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Persist to DB
+    # ─────────────────────────────────────────────────────────────────────────
+    try:
+        db_session = get_sync_db()
+        try:
+            client = _get_or_create_client(gstin, db_session)
+
+            summary_b2b = result["summary"].get("b2b", {})
+            payload_for_db = {
+                "file_number": file_number_value,
+                "b2b": b2b,
+                "b2ba": b2ba,
+                "cdn": cdn,
+                "summary_b2b_taxable_value": summary_b2b.get("taxable_value"),
+                "summary_b2b_igst": summary_b2b.get("igst"),
+                "summary_b2b_cgst": summary_b2b.get("cgst"),
+                "summary_b2b_sgst": summary_b2b.get("sgst"),
+                "summary_b2b_cess": summary_b2b.get("cess"),
+                "summary_b2b_invoice_count": summary_b2b.get("invoice_count"),
+                "status_cd": status_cd,
+                "upstream_status_code": response.status_code,
+            }
+
+            existing = db_session.query(Gstr9Table8A).filter(
+                Gstr9Table8A.client_id == client.id,
+                Gstr9Table8A.financial_year == financial_year,
+                Gstr9Table8A.file_number == file_number_value,
+            ).first()
+
+            if existing:
+                for field, value in payload_for_db.items():
+                    setattr(existing, field, value)
+            else:
+                record = Gstr9Table8A(
+                    client_id=client.id,
+                    financial_year=financial_year,
+                    **payload_for_db,
+                )
+                db_session.add(record)
+
+            db_session.commit()
+        except Exception as db_error:
+            db_session.rollback()
+            print(f"Database error saving GSTR9 Table 8A: {db_error}")
+        finally:
+            db_session.close()
+    except Exception as e:
+        print(f"Failed to get database session for GSTR9 Table 8A: {e}")
+
+    return result
 
 def get_gstr9_details(gstin: str, financial_year: str) -> Dict[str, Any]:
 
@@ -495,7 +617,7 @@ def get_gstr9_details(gstin: str, financial_year: str) -> Dict[str, Any]:
         ],
     }
 
-    return {
+    result = {
         "success":           True,
         "status_cd":         status_cd,
         "gstin":             inner.get("gstin"),
@@ -511,5 +633,56 @@ def get_gstr9_details(gstin: str, financial_year: str) -> Dict[str, Any]:
         "table17_hsn_summary":             table17,
         "raw": payload,
     }
+
+    detail_sections = {
+        "financial_period":  result.get("financial_period"),
+        "aggregate_turnover": result.get("aggregate_turnover"),
+        "table4_outward_taxable_supplies": table4,
+        "table5_exempt_nil_non_gst":       table5,
+        "table6_itc_availed":              table6,
+        "table7_itc_reversed":             table7,
+        "table8_itc_comparison":           table8,
+        "table9_tax_payable_vs_paid":      table9,
+        "table10_turnover_reconciliation": table10,
+        "table17_hsn_summary":             table17,
+    }
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Persist to DB
+    # ─────────────────────────────────────────────────────────────────────────
+    try:
+        db_session = get_sync_db()
+        try:
+            client = _get_or_create_client(gstin, db_session)
+
+            existing = db_session.query(Gstr9Details).filter(
+                Gstr9Details.client_id == client.id,
+                Gstr9Details.financial_year == financial_year,
+            ).first()
+
+            if existing:
+                existing.detail_sections = detail_sections
+                existing.status_cd = status_cd
+                existing.upstream_status_code = response.status_code
+            else:
+                record = Gstr9Details(
+                    client_id=client.id,
+                    financial_year=financial_year,
+                    detail_sections=detail_sections,
+                    status_cd=status_cd,
+                    upstream_status_code=response.status_code,
+                )
+                db_session.add(record)
+
+            db_session.commit()
+        except Exception as db_error:
+            db_session.rollback()
+            print(f"Database error saving GSTR9 details: {db_error}")
+        finally:
+            db_session.close()
+    except Exception as e:
+        print(f"Failed to get database session for GSTR9 details: {e}")
+
+    return result
 
 
