@@ -76,7 +76,12 @@ function fixFieldNames(record: any): any {
   // Convert string decimals to numbers
   const numericFields = ['taxable_value', 'invoice_value', 'note_value', 'total_taxable_value',
     'total_cgst', 'total_sgst', 'total_igst', 'cgst', 'sgst', 'igst', 'cess', 'rate',
-    'total_invoices', 'ttl_rec', 'ttl_val', 'ttl_tax', 'ttl_igst', 'ttl_cgst', 'ttl_sgst', 'ttl_cess'];
+    'total_invoices', 'ttl_rec', 'ttl_val', 'ttl_tax', 'ttl_igst', 'ttl_cgst', 'ttl_sgst', 'ttl_cess',
+    'cash_igst_tax', 'cash_igst_interest', 'cash_igst_penalty', 'cash_igst_fee', 'cash_igst_other',
+    'cash_igst_total', 'cash_cgst_total', 'cash_sgst_total', 'cash_cess_total',
+    'itc_igst', 'itc_cgst', 'itc_sgst', 'itc_cess', 'itc_blocked_igst', 'itc_blocked_cgst', 'itc_blocked_sgst', 'itc_blocked_cess',
+    'igst_amt', 'cgst_amt', 'sgst_amt', 'cess_amt', 'total_amount', 'igst_bal', 'cgst_bal', 'sgst_bal', 'cess_bal', 'total_range_balance',
+    'tot_tr_amt', 'tot_rng_bal'];
 
   numericFields.forEach(field => {
     if (field in normalized && typeof normalized[field] === 'string') {
