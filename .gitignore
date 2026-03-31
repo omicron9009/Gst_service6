@@ -14,3 +14,17 @@ routers/__pycache__/
 services/__pycache__/
 parsers/__pycache__/
 schemas/__pycache__/
+
+## Node / frontend
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+.vite/
+*.log
+*.lockb
+pnpm-lock.yaml
+package-lock.json
+yarn.lock
+.DS_Store
+.env

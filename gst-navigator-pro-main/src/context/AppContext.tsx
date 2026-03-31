@@ -3,9 +3,9 @@ import type { AppState, AppAction, GSTClient, AppSettings, FetchLogEntry } from 
 import { getSessionStatus } from '@/lib/api';
 
 const DEFAULT_SETTINGS: AppSettings = {
-  dbProxyUrl: 'http://localhost:9000',
+  dbProxyUrl: 'http://localhost:8050',
   dbProxyUser: 'admin',
-  dbProxyPass: 'password',
+  dbProxyPass: 'root',
   serviceApiUrl: 'http://localhost:8000',
 };
 
@@ -19,7 +19,24 @@ function loadClients(): GSTClient[] {
 function loadSettings(): AppSettings {
   try {
     const stored = localStorage.getItem('gst_settings');
-    return stored ? JSON.parse(stored) : DEFAULT_SETTINGS;
+    if (!stored) return DEFAULT_SETTINGS;
+
+    const parsed: Partial<AppSettings> = JSON.parse(stored);
+
+    // Backward compatibility: ensure credentials and URL align with current proxy defaults.
+    const safeSettings: AppSettings = {
+      dbProxyUrl: parsed.dbProxyUrl || DEFAULT_SETTINGS.dbProxyUrl,
+      dbProxyUser: parsed.dbProxyUser || DEFAULT_SETTINGS.dbProxyUser,
+      dbProxyPass: parsed.dbProxyPass || DEFAULT_SETTINGS.dbProxyPass,
+      serviceApiUrl: parsed.serviceApiUrl || DEFAULT_SETTINGS.serviceApiUrl,
+    };
+
+    // If an old password was persisted (e.g., "password"), replace with current default "root".
+    if (safeSettings.dbProxyPass === 'password') {
+      safeSettings.dbProxyPass = DEFAULT_SETTINGS.dbProxyPass;
+    }
+
+    return safeSettings;
   } catch { return DEFAULT_SETTINGS; }
 }
 

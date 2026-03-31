@@ -92,39 +92,6 @@ function fixFieldNames(record: any): any {
 export function useDbProxy() {
   const { state, dispatch, activeClient } = useApp();
 
-  // Fetch available periods when active client changes
-  useEffect(() => {
-    if (!activeClient?.gstin) return;
-
-    const loadPeriods = async () => {
-      try {
-        const result = await fetchAvailablePeriods(activeClient.gstin);
-        dispatch({
-          type: 'SET_AVAILABLE_PERIODS',
-          payload: result.periods || [],
-        });
-        // Auto-select first available period
-        if (result.periods && result.periods.length > 0) {
-          dispatch({
-            type: 'SET_SELECTED_PERIOD',
-            payload: result.periods[0],
-          });
-        }
-      } catch (err) {
-        console.error('Failed to fetch available periods:', err);
-      }
-    };
-
-    loadPeriods();
-  }, [activeClient?.gstin, dispatch]);
-
-  // Refetch data when selected period changes
-  useEffect(() => {
-    if (!activeClient?.gstin || !state.selectedPeriod) return;
-
-    refreshData(activeClient.gstin, state.selectedPeriod.year, state.selectedPeriod.month);
-  }, [activeClient?.gstin, state.selectedPeriod, refreshData]);
-
   const refreshData = useCallback(async (gstin?: string, year?: string, month?: string) => {
     const g = gstin || activeClient?.gstin;
     if (!g) return;
@@ -177,6 +144,39 @@ export function useDbProxy() {
       dispatch({ type: 'SET_DB_LOADING', payload: false });
     }
   }, [activeClient?.gstin, dispatch]);
+
+  // Fetch available periods when active client changes
+  useEffect(() => {
+    if (!activeClient?.gstin) return;
+
+    const loadPeriods = async () => {
+      try {
+        const result = await fetchAvailablePeriods(activeClient.gstin);
+        dispatch({
+          type: 'SET_AVAILABLE_PERIODS',
+          payload: result.periods || [],
+        });
+        // Auto-select first available period
+        if (result.periods && result.periods.length > 0) {
+          dispatch({
+            type: 'SET_SELECTED_PERIOD',
+            payload: result.periods[0],
+          });
+        }
+      } catch (err) {
+        console.error('Failed to fetch available periods:', err);
+      }
+    };
+
+    loadPeriods();
+  }, [activeClient?.gstin, dispatch]);
+
+  // Refetch data when selected period changes
+  useEffect(() => {
+    if (!activeClient?.gstin || !state.selectedPeriod) return;
+
+    refreshData(activeClient.gstin, state.selectedPeriod.year, state.selectedPeriod.month);
+  }, [activeClient?.gstin, state.selectedPeriod, refreshData]);
 
   const getData = useCallback((tableName: string): any[] => {
     if (!activeClient?.gstin) return [];
