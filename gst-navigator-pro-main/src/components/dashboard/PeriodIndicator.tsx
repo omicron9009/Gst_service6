@@ -1,17 +1,87 @@
-import { useMemo } from 'react';
+import { useMemo, useEffect } from 'react';
 import { useApp } from '@/context/AppContext';
 import { useDbProxy } from '@/hooks/useDbProxy';
+import { dbProxyFetch } from '@/lib/api';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
 import type { Period } from '@/types/client';
 
+interface TableAvailability {
+  [tableName: string]: boolean;
+}
+
 export function PeriodIndicator() {
   const { state, dispatch, activeClient } = useApp();
   const { getData } = useDbProxy();
 
+  // Fetch data for the active client to determine available periods
+  useEffect(() => {
+    if (!activeClient?.gstin) return;
+
+    const loadClientData = async () => {
+      try {
+        const response = await dbProxyFetch(activeClient.gstin);
+
+        // Extract all unique year/month combinations from all tables
+        const periodsMap = new Map<string, Set<string>>();
+
+        if (response.clients && Array.isArray(response.clients)) {
+          const clientData = response.clients.find((c: any) => c.gstin === activeClient.gstin);
+
+          if (clientData?.tables) {
+            Object.entries(clientData.tables).forEach(([tableName, tableInfo]: [string, any]) => {
+              if (tableInfo.rows && Array.isArray(tableInfo.rows)) {
+                tableInfo.rows.forEach((row: any) => {
+                  if (row.year && row.month) {
+                    const key = `${row.year}-${row.month}`;
+                    if (!periodsMap.has(key)) {
+                      periodsMap.set(key, new Set());
+                    }
+                    periodsMap.get(key)!.add(tableName);
+                  }
+                });
+              }
+            });
+          }
+        }
+
+        // Convert to sorted array of periods
+        const periods = Array.from(periodsMap.keys())
+          .map(key => {
+            const [year, month] = key.split('-');
+            return { year, month };
+          })
+          .sort((a, b) => {
+            const aDate = new Date(`${a.year}-${a.month}-01`);
+            const bDate = new Date(`${b.year}-${b.month}-01`);
+            return aDate.getTime() - bDate.getTime();
+          });
+
+        if (periods.length > 0) {
+          dispatch({
+            type: 'SET_AVAILABLE_PERIODS',
+            payload: periods,
+          });
+
+          // Auto-select first period if none selected
+          if (!state.selectedPeriod) {
+            dispatch({
+              type: 'SET_SELECTED_PERIOD',
+              payload: periods[0],
+            });
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load available periods from database:', err);
+      }
+    };
+
+    loadClientData();
+  }, [activeClient?.gstin, dispatch, state.selectedPeriod]);
+
   const periodInfo = useMemo(() => {
-    // Use a default period if none is selected (current month)
+    // Use a default period if none is selected
     const defaultPeriod: Period = {
       year: new Date().getFullYear().toString(),
       month: String(new Date().getMonth() + 1).padStart(2, '0'),
@@ -21,15 +91,6 @@ export function PeriodIndicator() {
     const month = period.month;
     const year = period.year;
 
-    // Get all data for current period to show what's available
-    const summary = getData('gstr1_summary');
-    const b2b = getData('gstr1_b2b');
-    const b2cs = getData('gstr1_b2cs');
-    const cdnr = getData('gstr1_cdnr');
-    const gstr2a = getData('gstr2a_b2b');
-    const gstr2b = getData('gstr2b');
-    const gstr9 = getData('gstr9_details');
-
     const monthNames = [
       'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
@@ -37,15 +98,56 @@ export function PeriodIndicator() {
 
     const monthName = monthNames[parseInt(month) - 1] || 'Unknown';
 
-    // Count available data sections
+    // Get all data for current period to show what's available
+    const summary = getData('gstr1_summary');
+    const b2b = getData('gstr1_b2b');
+    const b2cs = getData('gstr1_b2cs');
+    const b2csa = getData('gstr1_b2csa');
+    const cdnr = getData('gstr1_cdnr');
+    const cdnur = getData('gstr1_cdnur');
+    const docIssue = getData('gstr1_doc_issue');
+    const hsn = getData('gstr1_hsn');
+    const nil = getData('gstr1_nil');
+    const b2cl = getData('gstr1_b2cl');
+    const exp = getData('gstr1_exp');
+    const txp = getData('gstr1_txp');
+    const at = getData('gstr1_advance_tax');
+    const gstr2a_b2b = getData('gstr2a_b2b');
+    const gstr2a_cdn = getData('gstr2a_cdn');
+    const gstr2a_doc = getData('gstr2a_document');
+    const gstr2a_isd = getData('gstr2a_isd');
+    const gstr2a_tds = getData('gstr2a_tds');
+    const gstr2b = getData('gstr2b');
+    const gstr3b = getData('gstr3b_details');
+    const gstr9_auto = getData('gstr9_auto_calculated');
+    const gstr9_details = getData('gstr9_details');
+    const gstr9_8a = getData('gstr9_table8a');
+
+    // Count available data sections (only non-empty arrays)
     const availableSections = [
       summary.length > 0 ? 'GSTR-1' : null,
       b2b.length > 0 ? 'B2B' : null,
       b2cs.length > 0 ? 'B2CS' : null,
+      b2csa.length > 0 ? 'B2CSA' : null,
       cdnr.length > 0 ? 'CDNR' : null,
-      gstr2a.length > 0 ? 'GSTR-2A' : null,
+      cdnur.length > 0 ? 'CDNUR' : null,
+      docIssue.length > 0 ? 'Doc Issue' : null,
+      hsn.length > 0 ? 'HSN' : null,
+      nil.length > 0 ? 'Nil' : null,
+      b2cl.length > 0 ? 'B2CL' : null,
+      exp.length > 0 ? 'Export' : null,
+      txp.length > 0 ? 'TXP' : null,
+      at.length > 0 ? 'AT' : null,
+      gstr2a_b2b.length > 0 ? 'GSTR-2A (B2B)' : null,
+      gstr2a_cdn.length > 0 ? 'GSTR-2A (CDN)' : null,
+      gstr2a_doc.length > 0 ? 'GSTR-2A (Doc)' : null,
+      gstr2a_isd.length > 0 ? 'GSTR-2A (ISD)' : null,
+      gstr2a_tds.length > 0 ? 'GSTR-2A (TDS)' : null,
       gstr2b.length > 0 ? 'GSTR-2B' : null,
-      gstr9.length > 0 ? 'GSTR-9' : null,
+      gstr3b.length > 0 ? 'GSTR-3B' : null,
+      gstr9_auto.length > 0 ? 'GSTR-9 (Auto)' : null,
+      gstr9_details.length > 0 ? 'GSTR-9 (Details)' : null,
+      gstr9_8a.length > 0 ? 'GSTR-9 (8A)' : null,
     ].filter(Boolean);
 
     // Use available periods from state, or default to current period
