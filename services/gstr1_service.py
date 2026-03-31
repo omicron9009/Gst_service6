@@ -50,6 +50,39 @@ from schemas.gstr1 import (
 )
 from parsers.gstr1_parser import parse_gstr1_advance_tax
 
+# Database imports for persistence
+from database.core.database import get_sync_db
+from database.models.client import Client
+from database.services.gstr1.models import (
+    Gstr1B2B,
+    Gstr1Summary,
+    Gstr1B2CSA,
+    Gstr1B2CS,
+    Gstr1CDNR,
+    Gstr1DocIssue,
+    Gstr1HSN,
+    Gstr1Nil,
+    Gstr1B2CL,
+    Gstr1CDNUR,
+    Gstr1EXP,
+    Gstr1TXP,
+    Gstr1AdvanceTax,
+)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Database Helper Functions
+# ─────────────────────────────────────────────────────────────────────────────
+
+def get_or_create_client(gstin: str, session) -> Client:
+    """Get or create a Client record by GSTIN."""
+    client = session.query(Client).filter(Client.gstin == gstin).first()
+    if not client:
+        client = Client(gstin=gstin, username="", is_active=True)
+        session.add(client)
+        session.flush()  # Flush to get the ID without committing
+    return client
+
 
 # ---------------------------------------------------------------------------
 # GSTR-1 Advance Tax (AT)
@@ -103,6 +136,48 @@ def get_gstr1_advance_tax(gstin: str, year: str, month: str) -> Gstr1AdvanceTaxR
         )
 
     parsed_data = parse_gstr1_advance_tax(payload)
+
+    # ─────────────────────────────────────────────────────────────────────────────
+    # PERSIST TO DATABASE
+    # ─────────────────────────────────────────────────────────────────────────────
+    try:
+        db_session = get_sync_db()
+        try:
+            client = get_or_create_client(gstin, db_session)
+
+            # Convert parsed records to dicts for storage
+            records = [entry.model_dump() for entry in parsed_data]
+
+            # Check if record already exists
+            existing = db_session.query(Gstr1AdvanceTax).filter(
+                Gstr1AdvanceTax.client_id == client.id,
+                Gstr1AdvanceTax.year == year,
+                Gstr1AdvanceTax.month == month,
+            ).first()
+
+            if existing:
+                # Update existing record
+                existing.records = records
+                existing.upstream_status_code = response.status_code
+            else:
+                # Create new record
+                at_record = Gstr1AdvanceTax(
+                    client_id=client.id,
+                    year=year,
+                    month=month,
+                    records=records,
+                    upstream_status_code=response.status_code,
+                )
+                db_session.add(at_record)
+
+            db_session.commit()
+        except Exception as db_error:
+            db_session.rollback()
+            print(f"Database error saving GSTR1 Advance Tax: {db_error}")
+        finally:
+            db_session.close()
+    except Exception as e:
+        print(f"Failed to get database session: {e}")
 
     return Gstr1AdvanceTaxResponse(
         success=True,
@@ -226,6 +301,67 @@ def get_gstr1_b2b(
             total_igst += igst
             total_invoice_value += invoice_value
 
+    # ─────────────────────────────────────────────────────────────────────────────
+    # PERSIST TO DATABASE
+    # ─────────────────────────────────────────────────────────────────────────────
+    try:
+        db_session = get_sync_db()
+        try:
+            client = get_or_create_client(gstin, db_session)
+
+            # Normalize filter parameters for unique constraint
+            filter_action = action_required or ""
+            filter_from = from_date or ""
+            filter_cparty = counterparty_gstin or ""
+
+            # Check if record already exists
+            existing = db_session.query(Gstr1B2B).filter(
+                Gstr1B2B.client_id == client.id,
+                Gstr1B2B.year == year,
+                Gstr1B2B.month == month,
+                Gstr1B2B.filter_action_required == filter_action,
+                Gstr1B2B.filter_from_date == filter_from,
+                Gstr1B2B.filter_counterparty_gstin == filter_cparty,
+            ).first()
+
+            if existing:
+                # Update existing record
+                existing.total_invoices = len(invoices)
+                existing.total_taxable_value = total_taxable
+                existing.total_cgst = total_cgst
+                existing.total_sgst = total_sgst
+                existing.total_igst = total_igst
+                existing.invoices = invoices
+                existing.upstream_status_code = response.status_code
+            else:
+                # Create new record
+                b2b_record = Gstr1B2B(
+                    client_id=client.id,
+                    year=year,
+                    month=month,
+                    filter_action_required=filter_action,
+                    filter_from_date=filter_from,
+                    filter_counterparty_gstin=filter_cparty,
+                    total_invoices=len(invoices),
+                    total_taxable_value=total_taxable,
+                    total_cgst=total_cgst,
+                    total_sgst=total_sgst,
+                    total_igst=total_igst,
+                    invoices=invoices,
+                    upstream_status_code=response.status_code,
+                )
+                db_session.add(b2b_record)
+
+            db_session.commit()
+        except Exception as db_error:
+            db_session.rollback()
+            # Log but don't fail the API response - data is still returned
+            print(f"Database error saving GSTR1 B2B: {db_error}")
+        finally:
+            db_session.close()
+    except Exception as e:
+        print(f"Failed to get database session: {e}")
+
     return {
         "success": True,
         "summary": {
@@ -306,6 +442,52 @@ def get_gstr1_summary(gstin: str, year: str, month: str, summary_type: str = "sh
 
         interpreted_sections.append(section)
 
+    # ─────────────────────────────────────────────────────────────────────────────
+    # PERSIST TO DATABASE
+    # ─────────────────────────────────────────────────────────────────────────────
+    try:
+        db_session = get_sync_db()
+        try:
+            client = get_or_create_client(gstin, db_session)
+
+            # Check if record already exists
+            existing = db_session.query(Gstr1Summary).filter(
+                Gstr1Summary.client_id == client.id,
+                Gstr1Summary.year == year,
+                Gstr1Summary.month == month,
+                Gstr1Summary.summary_type == summary_type,
+            ).first()
+
+            ret_period = payload.get("ret_period")
+
+            if existing:
+                # Update existing record
+                existing.ret_period = ret_period
+                existing.sections = interpreted_sections
+                existing.upstream_status_code = resp.status_code
+            else:
+                # Create new record
+                summary_record = Gstr1Summary(
+                    client_id=client.id,
+                    year=year,
+                    month=month,
+                    summary_type=summary_type,
+                    ret_period=ret_period,
+                    sections=interpreted_sections,
+                    upstream_status_code=resp.status_code,
+                )
+                db_session.add(summary_record)
+
+            db_session.commit()
+        except Exception as db_error:
+            db_session.rollback()
+            # Log but don't fail the API response
+            print(f"Database error saving GSTR1 Summary: {db_error}")
+        finally:
+            db_session.close()
+    except Exception as e:
+        print(f"Failed to get database session: {e}")
+
     return {
         "success": True,
         "gstin": payload.get("gstin"),
@@ -373,6 +555,45 @@ def get_gstr1_b2csa(gstin: str, year: str, month: str) -> Dict[str, Any]:
             "sgst": entry.get("samt"),
             "cess": entry.get("csamt"),
         })
+
+    # ─────────────────────────────────────────────────────────────────────────────
+    # PERSIST TO DATABASE
+    # ─────────────────────────────────────────────────────────────────────────────
+    try:
+        db_session = get_sync_db()
+        try:
+            client = get_or_create_client(gstin, db_session)
+
+            # Check if record already exists
+            existing = db_session.query(Gstr1B2CSA).filter(
+                Gstr1B2CSA.client_id == client.id,
+                Gstr1B2CSA.year == year,
+                Gstr1B2CSA.month == month,
+            ).first()
+
+            if existing:
+                # Update existing record
+                existing.records = interpreted
+                existing.upstream_status_code = response.status_code
+            else:
+                # Create new record
+                b2csa_record = Gstr1B2CSA(
+                    client_id=client.id,
+                    year=year,
+                    month=month,
+                    records=interpreted,
+                    upstream_status_code=response.status_code,
+                )
+                db_session.add(b2csa_record)
+
+            db_session.commit()
+        except Exception as db_error:
+            db_session.rollback()
+            print(f"Database error saving GSTR1 B2CSA: {db_error}")
+        finally:
+            db_session.close()
+    except Exception as e:
+        print(f"Failed to get database session: {e}")
 
     return {
         "success": True,
@@ -453,6 +674,45 @@ def get_gstr1_b2cs(gstin: str, year: str, month: str) -> Dict[str, Any]:
             "checksum": entry.get("chksum"),
             "flag": entry.get("flag")
         })
+
+    # ─────────────────────────────────────────────────────────────────────────────
+    # PERSIST TO DATABASE
+    # ─────────────────────────────────────────────────────────────────────────────
+    try:
+        db_session = get_sync_db()
+        try:
+            client = get_or_create_client(gstin, db_session)
+
+            # Check if record already exists
+            existing = db_session.query(Gstr1B2CS).filter(
+                Gstr1B2CS.client_id == client.id,
+                Gstr1B2CS.year == year,
+                Gstr1B2CS.month == month,
+            ).first()
+
+            if existing:
+                # Update existing record
+                existing.records = interpreted
+                existing.upstream_status_code = response.status_code
+            else:
+                # Create new record
+                b2cs_record = Gstr1B2CS(
+                    client_id=client.id,
+                    year=year,
+                    month=month,
+                    records=interpreted,
+                    upstream_status_code=response.status_code,
+                )
+                db_session.add(b2cs_record)
+
+            db_session.commit()
+        except Exception as db_error:
+            db_session.rollback()
+            print(f"Database error saving GSTR1 B2CS: {db_error}")
+        finally:
+            db_session.close()
+    except Exception as e:
+        print(f"Failed to get database session: {e}")
 
     return {
         "success": True,
@@ -577,6 +837,55 @@ def get_gstr1_cdnr(
                 }
             )
 
+    # ─────────────────────────────────────────────────────────────────────────────
+    # PERSIST TO DATABASE
+    # ─────────────────────────────────────────────────────────────────────────────
+    try:
+        db_session = get_sync_db()
+        try:
+            client = get_or_create_client(gstin, db_session)
+
+            # Normalize filter parameters for unique constraint
+            filter_action = action_required or ""
+            filter_from = from_date or ""
+
+            # Check if record already exists
+            existing = db_session.query(Gstr1CDNR).filter(
+                Gstr1CDNR.client_id == client.id,
+                Gstr1CDNR.year == year,
+                Gstr1CDNR.month == month,
+                Gstr1CDNR.filter_action_required == filter_action,
+                Gstr1CDNR.filter_from_date == filter_from,
+            ).first()
+
+            if existing:
+                # Update existing record
+                existing.record_count = len(interpreted)
+                existing.records = interpreted
+                existing.upstream_status_code = response.status_code
+            else:
+                # Create new record
+                cdnr_record = Gstr1CDNR(
+                    client_id=client.id,
+                    year=year,
+                    month=month,
+                    filter_action_required=filter_action,
+                    filter_from_date=filter_from,
+                    record_count=len(interpreted),
+                    records=interpreted,
+                    upstream_status_code=response.status_code,
+                )
+                db_session.add(cdnr_record)
+
+            db_session.commit()
+        except Exception as db_error:
+            db_session.rollback()
+            print(f"Database error saving GSTR1 CDNR: {db_error}")
+        finally:
+            db_session.close()
+    except Exception as e:
+        print(f"Failed to get database session: {e}")
+
     return {
         "success": True,
         "request": {
@@ -647,6 +956,45 @@ def get_gstr1_doc_issue(gstin: str, year: str, month: str) -> Dict[str, Any]:
                 "net_issued": doc.get("net_issue"),
             })
 
+    # ─────────────────────────────────────────────────────────────────────────────
+    # PERSIST TO DATABASE
+    # ─────────────────────────────────────────────────────────────────────────────
+    try:
+        db_session = get_sync_db()
+        try:
+            client = get_or_create_client(gstin, db_session)
+
+            # Check if record already exists
+            existing = db_session.query(Gstr1DocIssue).filter(
+                Gstr1DocIssue.client_id == client.id,
+                Gstr1DocIssue.year == year,
+                Gstr1DocIssue.month == month,
+            ).first()
+
+            if existing:
+                # Update existing record
+                existing.records = interpreted
+                existing.upstream_status_code = response.status_code
+            else:
+                # Create new record
+                doc_issue_record = Gstr1DocIssue(
+                    client_id=client.id,
+                    year=year,
+                    month=month,
+                    records=interpreted,
+                    upstream_status_code=response.status_code,
+                )
+                db_session.add(doc_issue_record)
+
+            db_session.commit()
+        except Exception as db_error:
+            db_session.rollback()
+            print(f"Database error saving GSTR1 Document Issue: {db_error}")
+        finally:
+            db_session.close()
+    except Exception as e:
+        print(f"Failed to get database session: {e}")
+
     return {
         "success": True,
         "request": {
@@ -712,6 +1060,45 @@ def get_gstr1_hsn(gstin: str, year: str, month: str) -> Dict[str, Any]:
             "cgst": entry.get("camt"),
             "sgst": entry.get("samt"),
         })
+
+    # ─────────────────────────────────────────────────────────────────────────────
+    # PERSIST TO DATABASE
+    # ─────────────────────────────────────────────────────────────────────────────
+    try:
+        db_session = get_sync_db()
+        try:
+            client = get_or_create_client(gstin, db_session)
+
+            # Check if record already exists
+            existing = db_session.query(Gstr1HSN).filter(
+                Gstr1HSN.client_id == client.id,
+                Gstr1HSN.year == year,
+                Gstr1HSN.month == month,
+            ).first()
+
+            if existing:
+                # Update existing record
+                existing.records = interpreted
+                existing.upstream_status_code = response.status_code
+            else:
+                # Create new record
+                hsn_record = Gstr1HSN(
+                    client_id=client.id,
+                    year=year,
+                    month=month,
+                    records=interpreted,
+                    upstream_status_code=response.status_code,
+                )
+                db_session.add(hsn_record)
+
+            db_session.commit()
+        except Exception as db_error:
+            db_session.rollback()
+            print(f"Database error saving GSTR1 HSN: {db_error}")
+        finally:
+            db_session.close()
+    except Exception as e:
+        print(f"Failed to get database session: {e}")
 
     return {
         "success": True,
@@ -781,6 +1168,45 @@ def get_gstr1_nil(gstin: str, year: str, month: str) -> Dict[str, Any]:
             "exempted_amount": entry.get("expt_amt"),
             "non_gst_amount": entry.get("ngsup_amt"),
         })
+
+    # ─────────────────────────────────────────────────────────────────────────────
+    # PERSIST TO DATABASE
+    # ─────────────────────────────────────────────────────────────────────────────
+    try:
+        db_session = get_sync_db()
+        try:
+            client = get_or_create_client(gstin, db_session)
+
+            # Check if record already exists
+            existing = db_session.query(Gstr1Nil).filter(
+                Gstr1Nil.client_id == client.id,
+                Gstr1Nil.year == year,
+                Gstr1Nil.month == month,
+            ).first()
+
+            if existing:
+                # Update existing record
+                existing.records = interpreted
+                existing.upstream_status_code = response.status_code
+            else:
+                # Create new record
+                nil_record = Gstr1Nil(
+                    client_id=client.id,
+                    year=year,
+                    month=month,
+                    records=interpreted,
+                    upstream_status_code=response.status_code,
+                )
+                db_session.add(nil_record)
+
+            db_session.commit()
+        except Exception as db_error:
+            db_session.rollback()
+            print(f"Database error saving GSTR1 Nil: {db_error}")
+        finally:
+            db_session.close()
+    except Exception as e:
+        print(f"Failed to get database session: {e}")
 
     return {
         "success": True,
@@ -862,6 +1288,45 @@ def get_gstr1_b2cl(gstin: str, year: str, month: str, state_code: str = None) ->
                 "flag": inv.get("flag"),
                 "items": items,
             })
+
+    # ─────────────────────────────────────────────────────────────────────────────
+    # PERSIST TO DATABASE
+    # ─────────────────────────────────────────────────────────────────────────────
+    try:
+        db_session = get_sync_db()
+        try:
+            client = get_or_create_client(gstin, db_session)
+
+            # Check if record already exists
+            existing = db_session.query(Gstr1B2CL).filter(
+                Gstr1B2CL.client_id == client.id,
+                Gstr1B2CL.year == year,
+                Gstr1B2CL.month == month,
+            ).first()
+
+            if existing:
+                # Update existing record
+                existing.records = interpreted
+                existing.upstream_status_code = response.status_code
+            else:
+                # Create new record
+                b2cl_record = Gstr1B2CL(
+                    client_id=client.id,
+                    year=year,
+                    month=month,
+                    records=interpreted,
+                    upstream_status_code=response.status_code,
+                )
+                db_session.add(b2cl_record)
+
+            db_session.commit()
+        except Exception as db_error:
+            db_session.rollback()
+            print(f"Database error saving GSTR1 B2CL: {db_error}")
+        finally:
+            db_session.close()
+    except Exception as e:
+        print(f"Failed to get database session: {e}")
 
     return {
         "success": True,
@@ -955,6 +1420,45 @@ def get_gstr1_cdnur(gstin: str, year: str, month: str) -> Dict[str, Any]:
             "items": items,
         })
 
+    # ─────────────────────────────────────────────────────────────────────────────
+    # PERSIST TO DATABASE
+    # ─────────────────────────────────────────────────────────────────────────────
+    try:
+        db_session = get_sync_db()
+        try:
+            client = get_or_create_client(gstin, db_session)
+
+            # Check if record already exists
+            existing = db_session.query(Gstr1CDNUR).filter(
+                Gstr1CDNUR.client_id == client.id,
+                Gstr1CDNUR.year == year,
+                Gstr1CDNUR.month == month,
+            ).first()
+
+            if existing:
+                # Update existing record
+                existing.records = interpreted
+                existing.upstream_status_code = response.status_code
+            else:
+                # Create new record
+                cdnur_record = Gstr1CDNUR(
+                    client_id=client.id,
+                    year=year,
+                    month=month,
+                    records=interpreted,
+                    upstream_status_code=response.status_code,
+                )
+                db_session.add(cdnur_record)
+
+            db_session.commit()
+        except Exception as db_error:
+            db_session.rollback()
+            print(f"Database error saving GSTR1 CDNUR: {db_error}")
+        finally:
+            db_session.close()
+    except Exception as e:
+        print(f"Failed to get database session: {e}")
+
     return {
         "success": True,
         "request": {
@@ -1032,6 +1536,45 @@ def get_gstr1_exp(gstin: str, year: str, month: str) -> Dict[str, Any]:
                 "flag": inv.get("flag"),
                 "items": items,
             })
+
+    # ─────────────────────────────────────────────────────────────────────────────
+    # PERSIST TO DATABASE
+    # ─────────────────────────────────────────────────────────────────────────────
+    try:
+        db_session = get_sync_db()
+        try:
+            client = get_or_create_client(gstin, db_session)
+
+            # Check if record already exists
+            existing = db_session.query(Gstr1EXP).filter(
+                Gstr1EXP.client_id == client.id,
+                Gstr1EXP.year == year,
+                Gstr1EXP.month == month,
+            ).first()
+
+            if existing:
+                # Update existing record
+                existing.records = interpreted
+                existing.upstream_status_code = response.status_code
+            else:
+                # Create new record
+                exp_record = Gstr1EXP(
+                    client_id=client.id,
+                    year=year,
+                    month=month,
+                    records=interpreted,
+                    upstream_status_code=response.status_code,
+                )
+                db_session.add(exp_record)
+
+            db_session.commit()
+        except Exception as db_error:
+            db_session.rollback()
+            print(f"Database error saving GSTR1 EXP: {db_error}")
+        finally:
+            db_session.close()
+    except Exception as e:
+        print(f"Failed to get database session: {e}")
 
     return {
         "success": True,
