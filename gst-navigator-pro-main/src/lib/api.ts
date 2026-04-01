@@ -1,12 +1,12 @@
-import type { AppSettings } from '@/types/client';
+import type { AppSettings, ProxyClient } from '@/types/client';
 
 function getSettings(): AppSettings {
   const stored = localStorage.getItem('gst_settings');
   if (stored) return JSON.parse(stored);
   return {
-    dbProxyUrl: 'http://localhost:9000',
+    dbProxyUrl: 'http://localhost:8050',
     dbProxyUser: 'admin',
-    dbProxyPass: 'password',
+    dbProxyPass: 'root',
     serviceApiUrl: 'http://localhost:8000',
   };
 }
@@ -63,6 +63,28 @@ export async function dbProxyFetch(gstin?: string | string[], tables?: string[],
   return res.json();
 }
 
+export async function fetchProxyClients(includeInactive = false, gstin?: string | string[]): Promise<ProxyClient[]> {
+  const settings = getSettings();
+  const params = new URLSearchParams();
+
+  if (gstin) {
+    const gstins = Array.isArray(gstin) ? gstin : [gstin];
+    gstins.forEach(g => params.append('gstin', g));
+  }
+
+  params.append('include_inactive', includeInactive ? 'true' : 'false');
+
+  const creds = btoa(`${settings.dbProxyUser}:${settings.dbProxyPass}`);
+  const res = await fetch(`${settings.dbProxyUrl}/clients?${params.toString()}`, {
+    headers: { 'Authorization': `Basic ${creds}` },
+  });
+
+  if (!res.ok) throw new Error(`DB Proxy error: ${res.status} ${res.statusText}`);
+
+  const data = await res.json();
+  return (data && data.clients) ? data.clients as ProxyClient[] : data;
+}
+
 export async function fetchAvailablePeriods(gstin?: string): Promise<{ periods: Array<{ year: string; month: string }> }> {
   const settings = getSettings();
   const params = new URLSearchParams();
@@ -75,6 +97,25 @@ export async function fetchAvailablePeriods(gstin?: string): Promise<{ periods: 
   });
   if (!res.ok) throw new Error(`DB Proxy error: ${res.status} ${res.statusText}`);
   return res.json();
+}
+
+export async function downloadMonthlyReport(gstin: string, year: string, month: string, tables?: string[]): Promise<Blob> {
+  const settings = getSettings();
+  const params = new URLSearchParams();
+  params.append('gstin', gstin);
+  params.append('year', year);
+  params.append('month', month);
+  if (tables && tables.length > 0) {
+    tables.forEach(t => params.append('tables', t));
+  }
+
+  const creds = btoa(`${settings.dbProxyUser}:${settings.dbProxyPass}`);
+  const res = await fetch(`${settings.dbProxyUrl}/report?${params.toString()}`, {
+    headers: { 'Authorization': `Basic ${creds}` },
+  });
+
+  if (!res.ok) throw new Error(`DB Proxy error: ${res.status} ${res.statusText}`);
+  return res.blob();
 }
 
 // --- Auth ---

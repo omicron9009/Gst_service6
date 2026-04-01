@@ -100,10 +100,15 @@ export function useDbProxy() {
 
   const refreshData = useCallback(async (gstin?: string, year?: string, month?: string) => {
     const g = gstin || activeClient?.gstin;
+    const selectedPeriod = state.selectedPeriod;
+    const targetYear = year || selectedPeriod?.year;
+    const targetMonth = month || selectedPeriod?.month;
     if (!g) return;
+
+    // Fetch only for the requested period when available to avoid heavy proxy reads.
     dispatch({ type: 'SET_DB_LOADING', payload: true });
     try {
-      const response = await dbProxyFetch(g, undefined, year, month);
+      const response = await dbProxyFetch(g, undefined, targetYear, targetMonth);
 
       // Transform db_proxy response from nested structure to flat table structure
       const transformedData: Record<string, any[]> = {};
@@ -149,40 +154,43 @@ export function useDbProxy() {
     } finally {
       dispatch({ type: 'SET_DB_LOADING', payload: false });
     }
-  }, [activeClient?.gstin, dispatch]);
+  }, [activeClient?.gstin, dispatch, state.selectedPeriod]);
 
-  // Fetch available periods when active client changes
-  useEffect(() => {
-    if (!activeClient?.gstin) return;
+  const loadAvailablePeriods = useCallback(async (gstin?: string) => {
+    const g = gstin || activeClient?.gstin;
+    if (!g) return;
 
-    const loadPeriods = async () => {
-      try {
-        const result = await fetchAvailablePeriods(activeClient.gstin);
-        dispatch({
-          type: 'SET_AVAILABLE_PERIODS',
-          payload: result.periods || [],
-        });
-        // Auto-select first available period
-        if (result.periods && result.periods.length > 0) {
+    try {
+      const result = await fetchAvailablePeriods(g);
+      const periods = result.periods || [];
+
+      dispatch({
+        type: 'SET_AVAILABLE_PERIODS',
+        payload: periods,
+      });
+
+      if (periods.length > 0) {
+        const hasSelected = state.selectedPeriod && periods.some(
+          (p) => p.year === state.selectedPeriod?.year && p.month === state.selectedPeriod?.month,
+        );
+
+        if (!hasSelected) {
           dispatch({
             type: 'SET_SELECTED_PERIOD',
-            payload: result.periods[0],
+            payload: periods[0],
           });
         }
-      } catch (err) {
-        console.error('Failed to fetch available periods:', err);
       }
-    };
+    } catch (err) {
+      console.error('Failed to fetch available periods:', err);
+    }
+  }, [activeClient?.gstin, dispatch, state.selectedPeriod]);
 
-    loadPeriods();
-  }, [activeClient?.gstin, dispatch]);
-
-  // Refetch data when selected period changes
+  // Load periods automatically for the active client, but do not auto-fetch period data.
   useEffect(() => {
-    if (!activeClient?.gstin || !state.selectedPeriod) return;
-
-    refreshData(activeClient.gstin, state.selectedPeriod.year, state.selectedPeriod.month);
-  }, [activeClient?.gstin, state.selectedPeriod, refreshData]);
+    if (!activeClient?.gstin) return;
+    loadAvailablePeriods(activeClient.gstin);
+  }, [activeClient?.gstin, loadAvailablePeriods]);
 
   const getData = useCallback((tableName: string): any[] => {
     if (!activeClient?.gstin) return [];
@@ -191,5 +199,5 @@ export function useDbProxy() {
     return clientData[tableName] || [];
   }, [activeClient?.gstin, state.dbData]);
 
-  return { refreshData, getData, loading: state.dbLoading };
+  return { refreshData, getData, loadAvailablePeriods, loading: state.dbLoading };
 }

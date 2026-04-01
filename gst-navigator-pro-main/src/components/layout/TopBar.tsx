@@ -1,19 +1,22 @@
 import { useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import { maskGSTIN } from '@/lib/validators';
-import { formatTimestamp } from '@/lib/formatters';
 import { useDbProxy } from '@/hooks/useDbProxy';
+import { downloadMonthlyReport } from '@/lib/api';
+import { useToast } from '@/hooks/use-toast';
 import { AuthPanel } from '@/components/auth/AuthPanel';
 import { FetchModal } from '@/components/fetch/FetchModal';
 import { PeriodSelector } from '@/components/layout/PeriodSelector';
 import { Button } from '@/components/ui/button';
-import { KeyRound, RefreshCw, Download } from 'lucide-react';
+import { KeyRound, RefreshCw, Download, FileDown } from 'lucide-react';
 
 export function TopBar() {
-  const { activeClient, getSessionStatusForClient } = useApp();
+  const { state, activeClient, getSessionStatusForClient } = useApp();
   const { refreshData, loading } = useDbProxy();
+  const { toast } = useToast();
   const [authOpen, setAuthOpen] = useState(false);
   const [fetchOpen, setFetchOpen] = useState(false);
+  const [reportLoading, setReportLoading] = useState(false);
 
   const sessionStatus = activeClient ? getSessionStatusForClient(activeClient.gstin) : 'none';
 
@@ -24,6 +27,32 @@ export function TopBar() {
       </header>
     );
   }
+
+  const handleReportDownload = async () => {
+    if (!activeClient || !state.selectedPeriod) {
+      toast({ title: 'Select a period first', description: 'Choose month and year to generate the report.', variant: 'destructive' });
+      return;
+    }
+
+    setReportLoading(true);
+    try {
+      const { year, month } = state.selectedPeriod;
+      const blob = await downloadMonthlyReport(activeClient.gstin, year, month);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${activeClient.gstin}_${year}-${month}_report.html`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      toast({ title: 'Report downloaded', description: 'Branded monthly HTML report saved.' });
+    } catch (err: any) {
+      toast({ title: 'Report failed', description: err?.message || 'Unable to download report.', variant: 'destructive' });
+    } finally {
+      setReportLoading(false);
+    }
+  };
 
   return (
     <>
@@ -43,11 +72,27 @@ export function TopBar() {
             <KeyRound className="h-3.5 w-3.5" />
             Login / OTP
           </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            className="gap-1.5"
+            onClick={handleReportDownload}
+            disabled={reportLoading || !state.selectedPeriod}
+          >
+            <FileDown className={`h-3.5 w-3.5 ${reportLoading ? 'animate-spin' : ''}`} />
+            Generate Report
+          </Button>
           <Button size="sm" className="gap-1.5" onClick={() => setFetchOpen(true)}>
             <Download className="h-3.5 w-3.5" />
             Fetch All Data
           </Button>
-          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => refreshData()} disabled={loading}>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            onClick={() => state.selectedPeriod && refreshData(activeClient.gstin, state.selectedPeriod.year, state.selectedPeriod.month)}
+            disabled={loading || !state.selectedPeriod}
+          >
             <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
             Refresh
           </Button>

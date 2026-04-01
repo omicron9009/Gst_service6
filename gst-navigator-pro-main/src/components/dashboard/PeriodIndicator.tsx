@@ -1,7 +1,6 @@
-import { useMemo, useEffect } from 'react';
+import { useMemo } from 'react';
 import { useApp } from '@/context/AppContext';
 import { useDbProxy } from '@/hooks/useDbProxy';
-import { dbProxyFetch } from '@/lib/api';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
@@ -13,72 +12,7 @@ interface TableAvailability {
 
 export function PeriodIndicator() {
   const { state, dispatch, activeClient } = useApp();
-  const { getData } = useDbProxy();
-
-  // Fetch data for the active client to determine available periods
-  useEffect(() => {
-    if (!activeClient?.gstin) return;
-
-    const loadClientData = async () => {
-      try {
-        const response = await dbProxyFetch(activeClient.gstin);
-
-        // Extract all unique year/month combinations from all tables
-        const periodsMap = new Map<string, Set<string>>();
-
-        if (response.clients && Array.isArray(response.clients)) {
-          const clientData = response.clients.find((c: any) => c.gstin === activeClient.gstin);
-
-          if (clientData?.tables) {
-            Object.entries(clientData.tables).forEach(([tableName, tableInfo]: [string, any]) => {
-              if (tableInfo.rows && Array.isArray(tableInfo.rows)) {
-                tableInfo.rows.forEach((row: any) => {
-                  if (row.year && row.month) {
-                    const key = `${row.year}-${row.month}`;
-                    if (!periodsMap.has(key)) {
-                      periodsMap.set(key, new Set());
-                    }
-                    periodsMap.get(key)!.add(tableName);
-                  }
-                });
-              }
-            });
-          }
-        }
-
-        // Convert to sorted array of periods
-        const periods = Array.from(periodsMap.keys())
-          .map(key => {
-            const [year, month] = key.split('-');
-            return { year, month };
-          })
-          .sort((a, b) => {
-            const aDate = new Date(`${a.year}-${a.month}-01`);
-            const bDate = new Date(`${b.year}-${b.month}-01`);
-            return aDate.getTime() - bDate.getTime();
-          });
-
-        if (periods.length > 0) {
-          dispatch({
-            type: 'SET_AVAILABLE_PERIODS',
-            payload: periods,
-          });
-
-          // Auto-select first period if none selected
-          if (!state.selectedPeriod) {
-            dispatch({
-              type: 'SET_SELECTED_PERIOD',
-              payload: periods[0],
-            });
-          }
-        }
-      } catch (err) {
-        console.error('Failed to load available periods from database:', err);
-      }
-    };
-
-    loadClientData();
-  }, [activeClient?.gstin, dispatch, state.selectedPeriod]);
+  const { getData, refreshData, loadAvailablePeriods } = useDbProxy();
 
   const periodInfo = useMemo(() => {
     // Use a default period if none is selected
@@ -172,10 +106,14 @@ export function PeriodIndicator() {
       p => p.month === periodInfo.period.month && p.year === periodInfo.period.year
     );
     if (currentIndex > 0) {
+      const nextPeriod = periods[currentIndex - 1];
       dispatch({
         type: 'SET_SELECTED_PERIOD',
-        payload: periods[currentIndex - 1],
+        payload: nextPeriod,
       });
+      if (activeClient?.gstin) {
+        refreshData(activeClient.gstin, nextPeriod.year, nextPeriod.month);
+      }
     }
   };
 
@@ -185,10 +123,14 @@ export function PeriodIndicator() {
       p => p.month === periodInfo.period.month && p.year === periodInfo.period.year
     );
     if (currentIndex < periods.length - 1) {
+      const nextPeriod = periods[currentIndex + 1];
       dispatch({
         type: 'SET_SELECTED_PERIOD',
-        payload: periods[currentIndex + 1],
+        payload: nextPeriod,
       });
+      if (activeClient?.gstin) {
+        refreshData(activeClient.gstin, nextPeriod.year, nextPeriod.month);
+      }
     }
   };
 
@@ -216,6 +158,18 @@ export function PeriodIndicator() {
             Period {currentIndex} of {totalPeriods}
           </span>
         </div>
+
+        {totalPeriods === 0 && (
+          <div className="mb-3">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => activeClient?.gstin && loadAvailablePeriods(activeClient.gstin)}
+            >
+              Load Available Periods
+            </Button>
+          </div>
+        )}
 
         {/* Period Display and Navigation */}
         <div className="flex items-center justify-between mb-3">
@@ -289,7 +243,12 @@ export function PeriodIndicator() {
                 return (
                   <button
                     key={`${period.year}-${period.month}`}
-                    onClick={() => dispatch({ type: 'SET_SELECTED_PERIOD', payload: period })}
+                    onClick={() => {
+                      dispatch({ type: 'SET_SELECTED_PERIOD', payload: period });
+                      if (activeClient?.gstin) {
+                        refreshData(activeClient.gstin, period.year, period.month);
+                      }
+                    }}
                     className={`text-xs px-2 py-1 rounded transition-colors ${
                       isSelected
                         ? 'bg-blue-600 text-white font-semibold'

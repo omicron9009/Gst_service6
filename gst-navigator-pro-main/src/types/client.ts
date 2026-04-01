@@ -3,9 +3,21 @@ export interface GSTClient {
   label: string;
   username: string;
   gstin: string;
+  tradeName?: string | null;
+  legalName?: string | null;
+  isActive?: boolean;
   sessionToken: string | null;
   sessionExpiry: string | null;
-  addedAt: string;
+  addedAt?: string | null;
+}
+
+export interface ProxyClient {
+  id: number;
+  gstin: string;
+  username: string;
+  trade_name?: string | null;
+  legal_name?: string | null;
+  is_active?: boolean;
 }
 
 export interface AppSettings {

@@ -1,6 +1,6 @@
-import React, { createContext, useContext, useReducer, useEffect, useCallback } from 'react';
-import type { AppState, AppAction, GSTClient, AppSettings, FetchLogEntry } from '@/types/client';
-import { getSessionStatus } from '@/lib/api';
+import React, { createContext, useContext, useReducer, useEffect, useCallback, useRef } from 'react';
+import type { AppState, AppAction, GSTClient, AppSettings, FetchLogEntry, ProxyClient } from '@/types/client';
+import { fetchProxyClients, getSessionStatus } from '@/lib/api';
 
 const DEFAULT_SETTINGS: AppSettings = {
   dbProxyUrl: 'http://localhost:8050',
@@ -50,6 +50,41 @@ const initialState: AppState = {
   selectedPeriod: null,
   availablePeriods: [],
 };
+
+function mapProxyClients(
+  proxyClients: ProxyClient[],
+  existingByGstin: Map<string, GSTClient>,
+): GSTClient[] {
+  const normalizeGstin = (gstin: string) => (gstin || '').trim().toUpperCase();
+  const existingByNormalizedGstin = new Map(
+    Array.from(existingByGstin.entries()).map(([gstin, client]) => [normalizeGstin(gstin), client]),
+  );
+
+  return proxyClients.map((client) => {
+    const existing = existingByNormalizedGstin.get(normalizeGstin(client.gstin));
+    const label = existing?.label
+      || client.trade_name
+      || client.legal_name
+      || client.username
+      || client.gstin;
+
+    // Preserve username captured locally when the proxy does not return one; otherwise OTP payload is empty.
+    const username = client.username || existing?.username || '';
+
+    return {
+      id: String(client.id),
+      label,
+      username,
+      gstin: client.gstin,
+      tradeName: client.trade_name ?? null,
+      legalName: client.legal_name ?? null,
+      isActive: client.is_active ?? true,
+      sessionToken: existing?.sessionToken ?? null,
+      sessionExpiry: existing?.sessionExpiry ?? null,
+      addedAt: existing?.addedAt ?? null,
+    } satisfies GSTClient;
+  });
+}
 
 function appReducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
@@ -108,6 +143,7 @@ const AppContext = createContext<AppContextType | null>(null);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(appReducer, initialState);
+  const checkedSessions = useRef<Set<string>>(new Set());
 
   const activeClient = state.clients.find(c => c.id === state.activeClientId) || null;
 
@@ -128,9 +164,44 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem('gst_settings', JSON.stringify(state.settings));
   }, [state.settings]);
 
-  // Check session status on mount
+  // Load clients from DB proxy
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadClients = async () => {
+      try {
+        const proxyClients = await fetchProxyClients(false);
+        const existingByGstin = new Map(state.clients.map(c => [c.gstin, c]));
+        const normalized = mapProxyClients(proxyClients, existingByGstin);
+
+        if (cancelled) return;
+
+        dispatch({ type: 'SET_CLIENTS', payload: normalized });
+
+        if (!state.activeClientId && normalized.length > 0) {
+          dispatch({ type: 'SET_ACTIVE_CLIENT', payload: normalized[0].id });
+        }
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error('Failed to fetch clients from DB proxy', err);
+      }
+    };
+
+    loadClients();
+
+    return () => {
+      cancelled = true;
+    };
+    // We intentionally exclude state.clients from deps to avoid refetch loops; credentials changes re-trigger fetch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.settings.dbProxyUrl, state.settings.dbProxyUser, state.settings.dbProxyPass]);
+
+  // Check session status once per client
   useEffect(() => {
     state.clients.forEach(async (client) => {
+      if (checkedSessions.current.has(client.gstin)) return;
+      checkedSessions.current.add(client.gstin);
+
       try {
         const result = await getSessionStatus(client.gstin);
         if (result?.session_active) {
@@ -143,7 +214,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         // silently fail
       }
     });
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [state.clients]);
 
   const getSessionStatusForClient = useCallback((gstin: string): 'active' | 'expired' | 'none' => {
     const client = state.clients.find(c => c.gstin === gstin);

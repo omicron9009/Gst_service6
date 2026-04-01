@@ -5,6 +5,11 @@ from typing import Dict, Any, Optional
 from config import BASE_URL, API_KEY, API_VERSION
 from session_storage import get_session
 
+# Persistence
+from database.core.database import get_sync_db
+from database.models.client import Client
+from database.services.gstr2b.models import Gstr2B
+
 
 
 def _parse_invoice_items(items: list) -> tuple[float, float, float, float, float, Optional[float]]:
@@ -19,6 +24,73 @@ def _parse_invoice_items(items: list) -> tuple[float, float, float, float, float
         cess    += item.get("cess",  0) or 0
         rate     = item.get("rt", rate)
     return taxable, cgst, sgst, igst, cess, rate
+
+
+def _get_or_create_client(gstin: str, session) -> Client:
+    client = session.query(Client).filter(Client.gstin == gstin).first()
+    if not client:
+        client = Client(gstin=gstin, username="", is_active=True)
+        session.add(client)
+        session.flush()
+    return client
+
+
+def _upsert_gstr2b(
+    db_session,
+    *,
+    client_id: int,
+    year: str,
+    month: str,
+    file_number: str,
+    response_type: str,
+    status_cd: Optional[str],
+    upstream_status_code: int,
+    payload: Dict[str, Any],
+):
+    existing = (
+        db_session.query(Gstr2B)
+        .filter(
+            Gstr2B.client_id == client_id,
+            Gstr2B.year == year,
+            Gstr2B.month == month,
+            Gstr2B.file_number == file_number,
+        )
+        .first()
+    )
+
+    fields = {
+        "response_type": response_type,
+        "return_period": payload.get("return_period"),
+        "gen_date": payload.get("gen_date"),
+        "version": payload.get("version"),
+        "checksum": payload.get("checksum"),
+        "file_count": payload.get("file_count"),
+        "pagination_required": payload.get("pagination_required", False),
+        "counterparty_summary": payload.get("counterparty_summary"),
+        "itc_summary": payload.get("itc_summary"),
+        "b2b": payload.get("b2b"),
+        "b2ba": payload.get("b2ba"),
+        "cdnr": payload.get("cdnr"),
+        "cdnra": payload.get("cdnra"),
+        "isd": payload.get("isd"),
+        "grand_summary": payload.get("grand_summary"),
+        "status_cd": status_cd,
+        "upstream_status_code": upstream_status_code,
+    }
+
+    if existing:
+        for field, value in fields.items():
+            setattr(existing, field, value)
+    else:
+        db_session.add(
+            Gstr2B(
+                client_id=client_id,
+                year=year,
+                month=month,
+                file_number=file_number,
+                **fields,
+            )
+        )
 
 
 def _parse_b2b_section(b2b_raw: list) -> tuple[list, Dict[str, float]]:
@@ -352,6 +424,8 @@ def get_gstr2b(
     outer_data = payload.get("data", {})
     status_cd  = str(outer_data.get("status_cd", ""))
 
+    file_number_value = str(file_number or "")
+
     # ── status_cd = "0"  →  GST-level error ────────────────────────────────
     if status_cd == "0":
         error_block = outer_data.get("error", {})
@@ -376,7 +450,7 @@ def get_gstr2b(
     # ── status_cd = "3"  →  large return, must be fetched page-by-page ──────
     # First call (no file_number) returns fc; caller must loop file_number 1..fc
     if status_cd == "3" and file_number is None:
-        return {
+        result = {
             "success":        True,
             "status_cd":      "3",
             "pagination_required": True,
@@ -390,6 +464,38 @@ def get_gstr2b(
             ),
             "raw": payload,
         }
+
+        # Persist pagination flag for this period so repeated fetches update the same row.
+        try:
+            db_session = get_sync_db()
+            try:
+                client = _get_or_create_client(gstin, db_session)
+                _upsert_gstr2b(
+                    db_session,
+                    client_id=client.id,
+                    year=year,
+                    month=month,
+                    file_number=file_number_value,
+                    response_type="pagination_required",
+                    status_cd=status_cd,
+                    upstream_status_code=response.status_code,
+                    payload={
+                        "return_period": rtn_period,
+                        "gen_date": gen_date,
+                        "file_count": fc,
+                        "pagination_required": True,
+                    },
+                )
+                db_session.commit()
+            except Exception as db_error:
+                db_session.rollback()
+                print(f"Database error saving GSTR2B pagination marker: {db_error}")
+            finally:
+                db_session.close()
+        except Exception as e:
+            print(f"Failed to get database session for GSTR2B pagination marker: {e}")
+
+        return result
 
     # ── Detect response shape ────────────────────────────────────────────────
     # Shape A  (status_cd=1, summary only):   inner_data has "cpsumm"
@@ -406,7 +512,7 @@ def get_gstr2b(
     # ── Shape A: counterparty summary (no line-level invoices) ───────────────
     if has_cpsumm and not has_docdata:
         cpsumm = _parse_cpsumm(inner_data.get("cpsumm", {}))
-        return {
+        result = {
             "success":        True,
             "status_cd":      status_cd,
             "response_type":  "summary",          # cpsumm — per-supplier aggregates
@@ -420,6 +526,33 @@ def get_gstr2b(
             "itc_summary":    itc_summary,
             "raw":            payload,
         }
+
+        # Persist summary response (one per period/file_number) with upsert semantics.
+        try:
+            db_session = get_sync_db()
+            try:
+                client = _get_or_create_client(gstin, db_session)
+                _upsert_gstr2b(
+                    db_session,
+                    client_id=client.id,
+                    year=year,
+                    month=month,
+                    file_number=file_number_value,
+                    response_type="summary",
+                    status_cd=status_cd,
+                    upstream_status_code=response.status_code,
+                    payload=result,
+                )
+                db_session.commit()
+            except Exception as db_error:
+                db_session.rollback()
+                print(f"Database error saving GSTR2B summary: {db_error}")
+            finally:
+                db_session.close()
+        except Exception as e:
+            print(f"Failed to get database session for GSTR2B summary: {e}")
+
+        return result
 
     # ── Shape B: full document data (line-level invoices) ────────────────────
     docdata = inner_data.get("docdata", inner_data)     # pre-Oct-2024 has no "docdata" key
@@ -448,7 +581,7 @@ def get_gstr2b(
 
     #save to db 
 
-    return {
+    result = {
         "success":       True,
         "status_cd":     status_cd,
         "response_type": "documents",             # full line-level data
@@ -495,6 +628,33 @@ def get_gstr2b(
         "itc_summary": itc_summary,
         "raw":         payload,
     }
+
+    # Persist documents response for this period/file_number with upsert semantics.
+    try:
+        db_session = get_sync_db()
+        try:
+            client = _get_or_create_client(gstin, db_session)
+            _upsert_gstr2b(
+                db_session,
+                client_id=client.id,
+                year=year,
+                month=month,
+                file_number=str(result.get("file_number") or file_number_value),
+                response_type="documents",
+                status_cd=status_cd,
+                upstream_status_code=response.status_code,
+                payload=result,
+            )
+            db_session.commit()
+        except Exception as db_error:
+            db_session.rollback()
+            print(f"Database error saving GSTR2B documents: {db_error}")
+        finally:
+            db_session.close()
+    except Exception as e:
+        print(f"Failed to get database session for GSTR2B documents: {e}")
+
+    return result
 
 def get_gstr2b_regeneration_status(gstin: str, reference_id: str) -> Dict[str, Any]:
 
