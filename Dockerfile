@@ -11,8 +11,9 @@ RUN apt-get update && apt-get install -y curl sudo postgresql postgresql-contrib
 
 WORKDIR /app
 
-# Install Python dependencies natively
-RUN pip install --no-cache-dir fastapi "uvicorn[standard]" sqlalchemy asyncpg requests pydantic python-dotenv python-multipart
+# Install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy package.json and install Node dependencies for frontend
 COPY gst-navigator-pro-main/package*.json ./gst-navigator-pro-main/
@@ -23,6 +24,9 @@ COPY . .
 
 # Make the start script executable
 RUN chmod +x /app/start.sh
+
+# Persist PostgreSQL data across container restarts
+VOLUME /var/lib/postgresql
 
 # Expose ports: API (8000), DB Proxy (8050), Frontend (8080), and DB (5432)
 EXPOSE 8000 8050 8080 5432

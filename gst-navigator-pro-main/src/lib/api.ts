@@ -63,7 +63,7 @@ export async function dbProxyFetch(gstin?: string | string[], tables?: string[],
   return res.json();
 }
 
-export async function fetchProxyClients(includeInactive = false, gstin?: string | string[]): Promise<ProxyClient[]> {
+export async function fetchProxyClients(includeInactive = true, gstin?: string | string[]): Promise<ProxyClient[]> {
   const settings = getSettings();
   const params = new URLSearchParams();
 

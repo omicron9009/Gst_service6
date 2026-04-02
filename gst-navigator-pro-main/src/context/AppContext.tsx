@@ -170,16 +170,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     const loadClients = async () => {
       try {
-        const proxyClients = await fetchProxyClients(false);
+        const proxyClients = await fetchProxyClients(true);
         const existingByGstin = new Map(state.clients.map(c => [c.gstin, c]));
         const normalized = mapProxyClients(proxyClients, existingByGstin);
 
+        // Preserve local-only clients (added via modal but not yet OTP-verified / not in DB)
+        const proxyGstins = new Set(proxyClients.map(c => (c.gstin || '').trim().toUpperCase()));
+        const localOnly = state.clients.filter(c => !proxyGstins.has((c.gstin || '').trim().toUpperCase()));
+        const merged = [...normalized, ...localOnly];
+
         if (cancelled) return;
 
-        dispatch({ type: 'SET_CLIENTS', payload: normalized });
+        dispatch({ type: 'SET_CLIENTS', payload: merged });
 
-        if (!state.activeClientId && normalized.length > 0) {
-          dispatch({ type: 'SET_ACTIVE_CLIENT', payload: normalized[0].id });
+        if (!state.activeClientId && merged.length > 0) {
+          dispatch({ type: 'SET_ACTIVE_CLIENT', payload: merged[0].id });
         }
       } catch (err) {
         // eslint-disable-next-line no-console
@@ -204,7 +209,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       try {
         const result = await getSessionStatus(client.gstin);
-        if (result?.session_active) {
+        if (result?.active) {
           dispatch({
             type: 'UPDATE_CLIENT',
             payload: { ...client, sessionToken: result.access_token || client.sessionToken, sessionExpiry: result.session_expiry || client.sessionExpiry }
