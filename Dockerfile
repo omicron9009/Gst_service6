@@ -22,8 +22,8 @@ RUN cd gst-navigator-pro-main && npm ci
 # Copy the rest of the application
 COPY . .
 
-# Make the start script executable
-RUN chmod +x /app/start.sh
+# Make the start scripts executable
+RUN chmod +x /app/start.sh /app/start_safe.sh
 
 # Persist PostgreSQL data across container restarts
 VOLUME /var/lib/postgresql
@@ -32,4 +32,4 @@ VOLUME /var/lib/postgresql
 EXPOSE 8000 8050 8080 5432
 
 # Run the unified boot script
-CMD ["/app/start.sh"]
+CMD ["/app/start_safe.sh"]

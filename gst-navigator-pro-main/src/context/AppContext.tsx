@@ -2,11 +2,13 @@ import React, { createContext, useContext, useReducer, useEffect, useCallback, u
 import type { AppState, AppAction, GSTClient, AppSettings, FetchLogEntry, ProxyClient } from '@/types/client';
 import { fetchProxyClients, getSessionStatus } from '@/lib/api';
 
+const host = window.location.hostname;
+
 const DEFAULT_SETTINGS: AppSettings = {
-  dbProxyUrl: 'http://localhost:8050',
+  dbProxyUrl: `http://${host}:8050`,
   dbProxyUser: 'admin',
   dbProxyPass: 'root',
-  serviceApiUrl: 'http://localhost:8000',
+  serviceApiUrl: `http://${host}:8000`,
 };
 
 function loadClients(): GSTClient[] {

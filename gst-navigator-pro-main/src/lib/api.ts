@@ -1,13 +1,22 @@
 import type { AppSettings, ProxyClient } from '@/types/client';
 
+const host = window.location.hostname;
+
 function getSettings(): AppSettings {
   const stored = localStorage.getItem('gst_settings');
-  if (stored) return JSON.parse(stored);
+  if (stored) {
+    const parsed = JSON.parse(stored);
+    return {
+      ...parsed,
+      dbProxyUrl: `http://${host}:8050`,
+      serviceApiUrl: `http://${host}:8000`,
+    };
+  }
   return {
-    dbProxyUrl: 'http://localhost:8050',
+    dbProxyUrl: `http://${host}:8050`,
     dbProxyUser: 'admin',
     dbProxyPass: 'root',
-    serviceApiUrl: 'http://localhost:8000',
+    serviceApiUrl: `http://${host}:8000`,
   };
 }
 

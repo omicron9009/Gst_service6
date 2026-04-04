@@ -1,0 +1,36 @@
+# Environment & config (secrets passed at runtime via -e flags)
+.env
+.env.*
+
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__/
+**/__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Node (reinstalled during build via npm ci)
+node_modules/
+**/node_modules/
+
+# Build artifacts
+dist/
+**/dist/
+.vite/
+
+# IDE & OS
+.vscode/
+.idea/
+*.log
+.DS_Store
+
+# Docker meta (no need to send into build context)
+docker-compose.yml
+.dockerignore
+
+# Session data
+sessions/
