@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useApp } from '@/context/AppContext';
 import { maskGSTIN } from '@/lib/validators';
 import { useDbProxy } from '@/hooks/useDbProxy';
@@ -8,11 +9,12 @@ import { AuthPanel } from '@/components/auth/AuthPanel';
 import { FetchModal } from '@/components/fetch/FetchModal';
 import { PeriodSelector } from '@/components/layout/PeriodSelector';
 import { Button } from '@/components/ui/button';
-import { KeyRound, RefreshCw, Download, FileDown } from 'lucide-react';
+import { KeyRound, RefreshCw, Download, FileDown, FileSearch } from 'lucide-react';
 
 export function TopBar() {
   const { state, activeClient, getSessionStatusForClient } = useApp();
   const { refreshData, loading } = useDbProxy();
+  const navigate = useNavigate();
   const { toast } = useToast();
   const [authOpen, setAuthOpen] = useState(false);
   const [fetchOpen, setFetchOpen] = useState(false);
@@ -85,6 +87,10 @@ export function TopBar() {
           <Button size="sm" className="gap-1.5" onClick={() => setFetchOpen(true)}>
             <Download className="h-3.5 w-3.5" />
             Fetch All Data
+          </Button>
+          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => navigate('/reconcile-2b')}>
+            <FileSearch className="h-3.5 w-3.5" />
+            Reconcile 2B
           </Button>
           <Button
             variant="outline"

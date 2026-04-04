@@ -46,6 +46,20 @@ export async function servicePost(path: string, body: any, token?: string | null
   return res.json();
 }
 
+export async function servicePostFormData(path: string, formData: FormData, token?: string | null): Promise<any> {
+  const settings = getSettings();
+  const headers: Record<string, string> = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const res = await fetch(`${settings.serviceApiUrl}${path}`, {
+    method: 'POST',
+    headers,
+    body: formData,
+  });
+  if (res.status === 401) throw new Error('SESSION_EXPIRED');
+  if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+  return res.json();
+}
+
 // --- DB Proxy calls ---
 
 export async function dbProxyFetch(gstin?: string | string[], tables?: string[], year?: string, month?: string): Promise<Record<string, any[]>> {

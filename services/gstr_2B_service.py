@@ -74,6 +74,7 @@ def _upsert_gstr2b(
         "cdnra": payload.get("cdnra"),
         "isd": payload.get("isd"),
         "grand_summary": payload.get("grand_summary"),
+        "records": payload.get("records", []),
         "status_cd": status_cd,
         "upstream_status_code": upstream_status_code,
     }
@@ -375,6 +376,84 @@ def _parse_itcsumm(itcsumm: dict) -> Dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# Records builder — flattens parsed data into a single list for the proxy
+# ---------------------------------------------------------------------------
+
+def _build_records(result: Dict[str, Any]) -> list[Dict[str, Any]]:
+    """
+    Build a flat list of section-tagged records from the parsed result dict.
+    The db_proxy and frontend expect a single `records` JSONB array with each
+    item carrying a `section` field so the UI can filter/display by section.
+    """
+    records: list[Dict[str, Any]] = []
+    response_type = result.get("response_type", "")
+
+    # Metadata record — always present
+    records.append({
+        "section":        "metadata",
+        "response_type":  response_type,
+        "gstin":          result.get("gstin"),
+        "return_period":  result.get("return_period"),
+        "gen_date":       result.get("gen_date"),
+        "version":        result.get("version"),
+        "checksum":       result.get("checksum"),
+        "file_count":     result.get("file_count"),
+        "file_number":    result.get("file_number"),
+        "status_cd":      result.get("status_cd"),
+    })
+
+    # Grand summary record
+    grand_summary = result.get("grand_summary")
+    if grand_summary:
+        records.append({"section": "grand_summary", **grand_summary})
+
+    # B2B invoices
+    b2b = result.get("b2b")
+    if b2b and isinstance(b2b, dict):
+        for inv in b2b.get("invoices", []):
+            records.append({"section": "b2b", **inv})
+
+    # B2BA invoices
+    b2ba = result.get("b2ba")
+    if b2ba and isinstance(b2ba, dict):
+        for inv in b2ba.get("invoices", []):
+            records.append({"section": "b2ba", **inv})
+
+    # CDNR notes
+    cdnr = result.get("cdnr")
+    if cdnr and isinstance(cdnr, dict):
+        for note in cdnr.get("notes", []):
+            records.append({"section": "cdnr", **note})
+
+    # CDNRA notes
+    cdnra = result.get("cdnra")
+    if cdnra and isinstance(cdnra, dict):
+        for note in cdnra.get("notes", []):
+            records.append({"section": "cdnra", **note})
+
+    # ISD entries
+    isd = result.get("isd")
+    if isd and isinstance(isd, dict):
+        for entry in isd.get("entries", []):
+            records.append({"section": "isd", **entry})
+
+    # Counterparty summary (Shape A — summary-only responses)
+    cpsumm = result.get("counterparty_summary")
+    if cpsumm and isinstance(cpsumm, dict):
+        for row in cpsumm.get("b2b", []):
+            records.append({"section": "cpsumm_b2b", **row})
+        for row in cpsumm.get("cdnr", []):
+            records.append({"section": "cpsumm_cdnr", **row})
+
+    # ITC summary
+    itc = result.get("itc_summary")
+    if itc and isinstance(itc, dict):
+        records.append({"section": "itc_summary", **itc})
+
+    return records
+
+
+# ---------------------------------------------------------------------------
 # Main function
 # ---------------------------------------------------------------------------
 
@@ -439,13 +518,16 @@ def get_gstr2b(
 
     # ── Unwrap nested data envelope ─────────────────────────────────────────
     inner_data_wrapper = outer_data.get("data", {})
-    gstin_resp = inner_data_wrapper.get("gstin")
-    gen_date   = inner_data_wrapper.get("gendt")
-    rtn_period = inner_data_wrapper.get("rtnprd")
-    version    = inner_data_wrapper.get("version")
-    fc         = inner_data_wrapper.get("fc")           # file count (paginated)
     chksum     = inner_data_wrapper.get("chksum")
     inner_data = inner_data_wrapper.get("data", {})
+
+    # Metadata lives at inner_data level (payload.data.data.data.*) for most
+    # responses, but some older formats put it at inner_data_wrapper level.
+    gstin_resp = inner_data.get("gstin") or inner_data_wrapper.get("gstin")
+    gen_date   = inner_data.get("gendt") or inner_data_wrapper.get("gendt")
+    rtn_period = inner_data.get("rtnprd") or inner_data_wrapper.get("rtnprd")
+    version    = inner_data.get("version") or inner_data_wrapper.get("version")
+    fc         = inner_data.get("fc") or inner_data_wrapper.get("fc")
 
     # ── status_cd = "3"  →  large return, must be fetched page-by-page ──────
     # First call (no file_number) returns fc; caller must loop file_number 1..fc
@@ -484,6 +566,7 @@ def get_gstr2b(
                         "gen_date": gen_date,
                         "file_count": fc,
                         "pagination_required": True,
+                        "records": _build_records(result),
                     },
                 )
                 db_session.commit()
@@ -506,7 +589,9 @@ def get_gstr2b(
     has_docdata = "docdata" in inner_data
 
     # ── ITC summary (present in all successful shapes) ───────────────────────
-    itcsumm_raw = inner_data_wrapper.get("itcsumm", {})
+    # itcsumm may be at inner_data level (payload.data.data.data.itcsumm) or
+    # at inner_data_wrapper level depending on API version.
+    itcsumm_raw = inner_data.get("itcsumm") or inner_data_wrapper.get("itcsumm", {})
     itc_summary = _parse_itcsumm(itcsumm_raw) if itcsumm_raw else None
 
     # ── Shape A: counterparty summary (no line-level invoices) ───────────────
@@ -526,6 +611,7 @@ def get_gstr2b(
             "itc_summary":    itc_summary,
             "raw":            payload,
         }
+        result["records"] = _build_records(result)
 
         # Persist summary response (one per period/file_number) with upsert semantics.
         try:
@@ -628,6 +714,7 @@ def get_gstr2b(
         "itc_summary": itc_summary,
         "raw":         payload,
     }
+    result["records"] = _build_records(result)
 
     # Persist documents response for this period/file_number with upsert semantics.
     try:

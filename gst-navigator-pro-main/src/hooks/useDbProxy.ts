@@ -1,6 +1,14 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useApp } from '@/context/AppContext';
 import { dbProxyFetch, fetchAvailablePeriods } from '@/lib/api';
+
+// ---------------------------------------------------------------------------
+// De-duplication: because useDbProxy() is mounted in many components, we keep
+// a module-level guard so only ONE auto-load fires per gstin.
+// ---------------------------------------------------------------------------
+let _autoLoadedGstin: string | null = null;
+let _inflightRefresh: string | null = null; // "gstin:year:month" currently in-flight
+let _inflightPeriods: string | null = null; // gstin currently loading periods
 
 // Map of table names to their nested array keys
 const NESTED_ARRAY_KEYS: Record<string, string> = {
@@ -98,14 +106,24 @@ function fixFieldNames(record: any): any {
 export function useDbProxy() {
   const { state, dispatch, activeClient } = useApp();
 
+  // Use refs for volatile state so callbacks never change identity due to
+  // selectedPeriod / dbData changes — this is the key to stopping the loop.
+  const selectedPeriodRef = useRef(state.selectedPeriod);
+  selectedPeriodRef.current = state.selectedPeriod;
+  const dbDataRef = useRef(state.dbData);
+  dbDataRef.current = state.dbData;
+
   const refreshData = useCallback(async (gstin?: string, year?: string, month?: string) => {
     const g = gstin || activeClient?.gstin;
-    const selectedPeriod = state.selectedPeriod;
-    const targetYear = year || selectedPeriod?.year;
-    const targetMonth = month || selectedPeriod?.month;
+    const targetYear = year || selectedPeriodRef.current?.year;
+    const targetMonth = month || selectedPeriodRef.current?.month;
     if (!g) return;
 
-    // Fetch only for the requested period when available to avoid heavy proxy reads.
+    // De-duplicate: skip if an identical request is already in-flight
+    const key = `${g}:${targetYear}:${targetMonth}`;
+    if (_inflightRefresh === key) return;
+    _inflightRefresh = key;
+
     dispatch({ type: 'SET_DB_LOADING', payload: true });
     try {
       const response = await dbProxyFetch(g, undefined, targetYear, targetMonth);
@@ -113,32 +131,22 @@ export function useDbProxy() {
       // Transform db_proxy response from nested structure to flat table structure
       const transformedData: Record<string, any[]> = {};
 
-      // The db_proxy response has structure: { clients: [...], filters: ..., summary: ... }
       if (response.clients && Array.isArray(response.clients)) {
-        // Find client matching the GSTIN
         const clientData = response.clients.find((c: any) => c.gstin === g);
         if (clientData && clientData.tables) {
-          // Flatten and normalize each table
           Object.entries(clientData.tables).forEach(([tableName, tableData]: [string, any]) => {
-            // Get the array from nested structure
-            const rowArray = tableData.rows || [];
-
-            // For each row, extract its nested array (invoices, records, sections, etc.)
+            const rowArray = (tableData as any).rows || [];
             const flattened: any[] = [];
 
             rowArray.forEach((row: any) => {
               if (!row || typeof row !== 'object') return;
-
-              // Get the nested array key for this table
               const nestedKey = NESTED_ARRAY_KEYS[tableName];
 
               if (nestedKey && Array.isArray(row[nestedKey])) {
-                // Extract and normalize each item in the nested array
                 row[nestedKey].forEach((item: any) => {
                   flattened.push(fixFieldNames(item));
                 });
               } else {
-                // No nested array, push the row itself (normalized)
                 flattened.push(fixFieldNames(row));
               }
             });
@@ -152,13 +160,23 @@ export function useDbProxy() {
     } catch (err: any) {
       console.error('DB Proxy error:', err);
     } finally {
+      _inflightRefresh = null;
       dispatch({ type: 'SET_DB_LOADING', payload: false });
     }
-  }, [activeClient?.gstin, dispatch, state.selectedPeriod]);
+  }, [activeClient?.gstin, dispatch]);
+  // NOTE: selectedPeriod removed from deps — read via ref instead
+
+  // Stable ref so loadAvailablePeriods can call refreshData without circular deps
+  const refreshDataRef = useRef(refreshData);
+  refreshDataRef.current = refreshData;
 
   const loadAvailablePeriods = useCallback(async (gstin?: string) => {
     const g = gstin || activeClient?.gstin;
     if (!g) return;
+
+    // De-duplicate: skip if already loading periods for this gstin
+    if (_inflightPeriods === g) return;
+    _inflightPeriods = g;
 
     try {
       const result = await fetchAvailablePeriods(g);
@@ -169,27 +187,43 @@ export function useDbProxy() {
         payload: periods,
       });
 
+      let targetPeriod = selectedPeriodRef.current;
+
       if (periods.length > 0) {
-        const hasSelected = state.selectedPeriod && periods.some(
-          (p) => p.year === state.selectedPeriod?.year && p.month === state.selectedPeriod?.month,
+        const hasSelected = targetPeriod && periods.some(
+          (p) => p.year === targetPeriod?.year && p.month === targetPeriod?.month,
         );
 
         if (!hasSelected) {
+          targetPeriod = periods[0];
           dispatch({
             type: 'SET_SELECTED_PERIOD',
             payload: periods[0],
           });
         }
       }
+
+      // Auto-fetch data for the resolved period
+      if (targetPeriod) {
+        await refreshDataRef.current(g, targetPeriod.year, targetPeriod.month);
+      }
     } catch (err) {
       console.error('Failed to fetch available periods:', err);
+    } finally {
+      _inflightPeriods = null;
     }
-  }, [activeClient?.gstin, dispatch, state.selectedPeriod]);
+  }, [activeClient?.gstin, dispatch]);
+  // NOTE: selectedPeriod removed from deps — read via ref instead
 
-  // Load periods automatically for the active client, but do not auto-fetch period data.
+  // Load periods (and their data) automatically for the active client.
+  // Module-level guard ensures this fires at most ONCE per gstin, even though
+  // useDbProxy() is mounted in 12+ components simultaneously.
   useEffect(() => {
-    if (!activeClient?.gstin) return;
-    loadAvailablePeriods(activeClient.gstin);
+    const gstin = activeClient?.gstin;
+    if (!gstin) return;
+    if (_autoLoadedGstin === gstin) return; // already loaded for this client
+    _autoLoadedGstin = gstin;
+    loadAvailablePeriods(gstin);
   }, [activeClient?.gstin, loadAvailablePeriods]);
 
   const getData = useCallback((tableName: string): any[] => {
