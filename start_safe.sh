@@ -65,27 +65,50 @@ su - postgres -c "createdb ${POSTGRES_DB}"
 su - postgres -c "psql -c \"SELECT pg_reload_conf();\""
 
 # =========================
-# Create Tables (SAFE)
+# Create Tables + Auto-Migrate (SAFE)
 # =========================
-echo "📊 Checking tables..."
+echo "📊 Creating tables & migrating missing columns..."
 
-TABLES_EXIST=$(PGPASSWORD=${POSTGRES_PASSWORD} psql -U ${POSTGRES_USER} -h localhost -d ${POSTGRES_DB} -tAc \
-"SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public' AND table_name='clients';")
+python - <<'PYEOF'
+import os, sys
+from sqlalchemy import create_engine, inspect, text
 
-if [ "$TABLES_EXIST" = "1" ]; then
-  echo "✔ Tables exist — skipping"
-else
-  echo "🛠 Creating tables..."
-  python - <<EOF
-from sqlalchemy import create_engine
+# --- import every model so Base.metadata knows about all tables ---
 from database import Base
 
-engine = create_engine("postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:5432/${POSTGRES_DB}")
+DB_URL = os.environ["DATABASE_URL"].replace("+asyncpg", "")
+engine = create_engine(DB_URL)
+
+# 1) Create any brand-new tables (no-op for existing ones)
 Base.metadata.create_all(engine)
+print("✔ create_all done")
+
+# 2) Auto-add missing columns to existing tables
+inspector = inspect(engine)
+existing_tables = set(inspector.get_table_names(schema="public"))
+
+with engine.begin() as conn:
+    for table in Base.metadata.sorted_tables:
+        if table.name not in existing_tables:
+            continue                       # just created above, nothing to migrate
+        db_cols = {c["name"] for c in inspector.get_columns(table.name, schema="public")}
+        for col in table.columns:
+            if col.name in db_cols:
+                continue                   # already present
+            # Build the column type DDL
+            col_type = col.type.compile(dialect=engine.dialect)
+            nullable = "" if col.nullable else " NOT NULL"
+            default  = ""
+            if col.server_default is not None:
+                sd = col.server_default.arg
+                default = f" DEFAULT {sd.text}" if hasattr(sd, "text") else f" DEFAULT {sd.compile(dialect=engine.dialect)}"
+            ddl = f'ALTER TABLE "{table.name}" ADD COLUMN "{col.name}" {col_type}{nullable}{default};'
+            print(f"  ➕ {ddl}")
+            conn.execute(text(ddl))
+
 engine.dispose()
-print("Tables created successfully.")
-EOF
-fi
+print("✔ Migration complete")
+PYEOF
 
 # =========================
 # Start Services

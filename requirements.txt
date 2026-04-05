@@ -12,3 +12,4 @@ dotenv
 rapidfuzz
 xlsxwriter
 pandas
+openpyxl

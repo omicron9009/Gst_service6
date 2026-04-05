@@ -45,7 +45,10 @@ def get_mapped_sum(df, mapping, fields):
 
 
 def auto_map_columns(df_columns, required_cols=None):
-    """Return a dict {original_col: standard_col} by simple substring matching.
+    """Return a dict {original_col: standard_col} using regex pattern matching.
+
+    Handles real-world GST Excel column-name variations such as
+    "GSTIN of Supplier", "Integrated Tax - Tax Amount", "Inv No.", etc.
 
     *required_cols* defaults to the standard GST reconciliation fields.
     """
@@ -55,12 +58,84 @@ def auto_map_columns(df_columns, required_cols=None):
             "Taxable Value", "CGST", "SGST", "IGST",
         ]
 
+    # Ordered list of regex patterns per standard field.
+    # First match wins, so more specific patterns come first.
+    _PATTERNS = {
+        "GSTIN": re.compile(
+            r"gstin|gst\s*in|gstn|gst\s*no|gst\s*number|uin",
+            re.IGNORECASE,
+        ),
+        "Party Name": re.compile(
+            r"party\s*name|trade.*name|legal.*name|supplier.*name"
+            r"|name.*supplier|vendor.*name|name.*vendor"
+            r"|customer.*name|name.*party|dealer.*name",
+            re.IGNORECASE,
+        ),
+        "Invoice No": re.compile(
+            r"inv(?:oice)?\s*(?:no|num|number|#)"
+            r"|document\s*(?:no|num|number)"
+            r"|note\s*(?:no|num|number)"
+            r"|voucher\s*(?:no|num|number)"
+            r"|bill\s*(?:no|num|number)"
+            r"|inv(?:oice)?\s*(?:ref)",
+            re.IGNORECASE,
+        ),
+        "Invoice Date": re.compile(
+            r"inv(?:oice)?\s*(?:date|dt)"
+            r"|document\s*(?:date|dt)"
+            r"|note\s*(?:date|dt)"
+            r"|voucher\s*(?:date|dt)"
+            r"|bill\s*(?:date|dt)",
+            re.IGNORECASE,
+        ),
+        "Taxable Value": re.compile(
+            r"taxable\s*(?:val|value|amt|amount)"
+            r"|assessable\s*(?:val|value|amt|amount)"
+            r"|base\s*(?:val|value|amt|amount)",
+            re.IGNORECASE,
+        ),
+        "IGST": re.compile(
+            r"\bigst\b|integrated\s*tax|integrated\s*gst",
+            re.IGNORECASE,
+        ),
+        "CGST": re.compile(
+            r"\bcgst\b|central\s*tax|central\s*gst",
+            re.IGNORECASE,
+        ),
+        "SGST": re.compile(
+            r"\bsgst\b|\butgst\b|state\s*tax|state\s*gst|sgst\s*/\s*utgst",
+            re.IGNORECASE,
+        ),
+    }
+
+    # ------- pass 1: exact (case-insensitive) match -------
     mapping = {}
+    used_cols = set()
+
     for req in required_cols:
         for col in df_columns:
-            if req.lower() in col.lower() or col.lower() in req.lower():
+            if col in used_cols:
+                continue
+            if col.strip().lower() == req.lower():
                 mapping[col] = req
+                used_cols.add(col)
                 break
+
+    # ------- pass 2: regex match on remaining fields -------
+    for req in required_cols:
+        if req in mapping.values():
+            continue
+        pat = _PATTERNS.get(req)
+        if pat is None:
+            continue
+        for col in df_columns:
+            if col in used_cols:
+                continue
+            if pat.search(col):
+                mapping[col] = req
+                used_cols.add(col)
+                break
+
     return mapping
 
 
@@ -441,7 +516,7 @@ def _write_df_to_sheet(workbook, sheet_name, df, formats):
     fmt_total_text = formats['total_text']
     fmt_total_num = formats['total_num']
 
-    is_data_sheet = sheet_name in ["Matched", "Books_Not_in_2B", "2B_Not_in_Books"]
+    is_data_sheet = sheet_name not in ["Summary"]
     if is_data_sheet:
         df = df.copy()
         total_row = {col: "" for col in df.columns}
@@ -881,7 +956,7 @@ def export_to_excel_combined(
         }),
     }
 
-    # ---- B2B Summary ----
+    # ---- B2B Summary (formula-driven, mirrors the Streamlit app) ----
     b_total = get_mapped_sum(b2b_books_df, b2b_books_mapping, ['CGST', 'SGST', 'IGST'])
     t_total = get_mapped_sum(b2b_t2b_df, b2b_t2b_mapping, ['CGST', 'SGST', 'IGST'])
 
@@ -904,21 +979,64 @@ def export_to_excel_combined(
             get_mapped_sum(b2b_t2b_df, b2b_t2b_mapping, ['SGST']),
             t_total,
         ],
-        ["Matched (B2B)", tc(b2b_matched), safe_sum(b2b_matched, 'Taxable Amt.'),
-         safe_sum(b2b_matched, 'IGST'), safe_sum(b2b_matched, 'CGST'),
-         safe_sum(b2b_matched, 'SGST'), safe_sum(b2b_matched, 'Total Tax')],
-        ["Books Not in 2B (B2B)", tc(b2b_un_books), safe_sum(b2b_un_books, 'Taxable Value'),
-         safe_sum(b2b_un_books, 'IGST'), safe_sum(b2b_un_books, 'CGST'),
-         safe_sum(b2b_un_books, 'SGST'), 0],
-        ["2B Not in Books (B2B)", tc(b2b_un_2b), safe_sum(b2b_un_2b, 'Taxable Value'),
-         safe_sum(b2b_un_2b, 'IGST'), safe_sum(b2b_un_2b, 'CGST'),
-         safe_sum(b2b_un_2b, 'SGST'), 0],
+        [
+            "Matched (B2B)",
+            f"=COUNTA('B2B_Matched'!A2:A{max(2, tc(b2b_matched) + 1)})" if not b2b_matched.empty else 0,
+            f"={_get_total_cell('B2B_Matched', b2b_matched, 'Taxable Amt.')}",
+            f"={_get_total_cell('B2B_Matched', b2b_matched, 'IGST')}",
+            f"={_get_total_cell('B2B_Matched', b2b_matched, 'CGST')}",
+            f"={_get_total_cell('B2B_Matched', b2b_matched, 'SGST')}",
+            f"={_get_total_cell('B2B_Matched', b2b_matched, 'Total Tax')}",
+        ],
+        [
+            "Books Not in 2B (B2B)",
+            f"=COUNTA('B2B_Books_Not_in_2B'!A2:A{max(2, tc(b2b_un_books) + 1)})" if not b2b_un_books.empty else 0,
+            f"={_get_total_cell('B2B_Books_Not_in_2B', b2b_un_books, 'Taxable Value')}",
+            f"={_get_total_cell('B2B_Books_Not_in_2B', b2b_un_books, 'IGST')}",
+            f"={_get_total_cell('B2B_Books_Not_in_2B', b2b_un_books, 'CGST')}",
+            f"={_get_total_cell('B2B_Books_Not_in_2B', b2b_un_books, 'SGST')}",
+            "=D7+E7+F7",
+        ],
+        [
+            "2B Not in Books (B2B)",
+            f"=COUNTA('B2B_2B_Not_in_Books'!A2:A{max(2, tc(b2b_un_2b) + 1)})" if not b2b_un_2b.empty else 0,
+            f"={_get_total_cell('B2B_2B_Not_in_Books', b2b_un_2b, 'Taxable Value')}",
+            f"={_get_total_cell('B2B_2B_Not_in_Books', b2b_un_2b, 'IGST')}",
+            f"={_get_total_cell('B2B_2B_Not_in_Books', b2b_un_2b, 'CGST')}",
+            f"={_get_total_cell('B2B_2B_Not_in_Books', b2b_un_2b, 'SGST')}",
+            "=D8+E8+F8",
+        ],
+    ]
+
+    # ---- B2B Cross-check ----
+    summary_rows += [
+        [],
+        ["", "", "", "", "", "", ""],
+        ["", "Invoice Count", "Taxable Value", "IGST", "CGST", "SGST", "Total Tax Amount"],
+        ["[B2B CROSS CHECK] 1. Books Validation", "", "", "", "", "", ""],
+        ["   -> Total from Uploaded Books", "=B3", "=C3", "=D3", "=E3", "=F3", "=G3"],
+        ["   -> Accounted For (Matched + Books Not in 2B)", "=B6+B7", "=C6+C7", "=D6+D7", "=E6+E7", "=F6+F7", "=G6+G7"],
+        ["   -> Books Variance (Difference)", "=B13-B14", "=C13-C14", "=D13-D14", "=E13-E14", "=F13-F14", "=G13-G14"],
+        [],
+        ["[B2B CROSS CHECK] 2. GSTR-2B Validation", "", "", "", "", "", ""],
+        ["   -> Total from Uploaded GSTR 2B", "=B4", "=C4", "=D4", "=E4", "=F4", "=G4"],
+        [
+            "   -> Accounted For (Matched 2B values + 2B Not in Books)",
+            "=B6+B8",
+            f"={_get_total_cell('B2B_Matched', b2b_matched, '2B Taxable Amt.')} + C8",
+            f"={_get_total_cell('B2B_Matched', b2b_matched, '2B IGST')} + D8",
+            f"={_get_total_cell('B2B_Matched', b2b_matched, '2B CGST')} + E8",
+            f"={_get_total_cell('B2B_Matched', b2b_matched, '2B SGST')} + F8",
+            f"={_get_total_cell('B2B_Matched', b2b_matched, '2B Total Tax')} + G8",
+        ],
+        ["   -> 2B Variance (Difference)", "=B18-B19", "=C18-C19", "=D18-D19", "=E18-E19", "=F18-F19", "=G18-G19"],
     ]
 
     # ---- CDNR Summary ----
     cn_b_total = get_mapped_sum(cdnr_books_df, cdnr_books_mapping, ['CGST', 'SGST', 'IGST']) if not cdnr_t2b_df.empty else 0
     cn_t_total = get_mapped_sum(cdnr_t2b_df, cdnr_t2b_mapping, ['CGST', 'SGST', 'IGST']) if not cdnr_t2b_df.empty else 0
 
+    # Row 22 onwards (0-indexed in the list, but row 22+ in Excel after header)
     summary_rows += [
         [],
         ["CDNR RECONCILIATION", "", "", "", "", "", ""],
@@ -931,15 +1049,33 @@ def export_to_excel_combined(
             get_mapped_sum(cdnr_t2b_df, cdnr_t2b_mapping, ['SGST']) if not cdnr_t2b_df.empty else 0,
             cn_t_total,
         ],
-        ["Matched (CDNR)", tc(cdnr_matched), safe_sum(cdnr_matched, 'Taxable Amt.'),
-         safe_sum(cdnr_matched, 'IGST'), safe_sum(cdnr_matched, 'CGST'),
-         safe_sum(cdnr_matched, 'SGST'), safe_sum(cdnr_matched, 'Total Tax')],
-        ["Books Not in 2B (CDNR)", tc(cdnr_un_books), safe_sum(cdnr_un_books, 'Taxable Value'),
-         safe_sum(cdnr_un_books, 'IGST'), safe_sum(cdnr_un_books, 'CGST'),
-         safe_sum(cdnr_un_books, 'SGST'), 0],
-        ["2B Not in Books (CDNR)", tc(cdnr_un_2b), safe_sum(cdnr_un_2b, 'Taxable Value'),
-         safe_sum(cdnr_un_2b, 'IGST'), safe_sum(cdnr_un_2b, 'CGST'),
-         safe_sum(cdnr_un_2b, 'SGST'), 0],
+        [
+            "Matched (CDNR)",
+            f"=COUNTA('CDNR_Matched'!A2:A{max(2, tc(cdnr_matched) + 1)})" if not cdnr_matched.empty else 0,
+            f"={_get_total_cell('CDNR_Matched', cdnr_matched, 'Taxable Amt.')}",
+            f"={_get_total_cell('CDNR_Matched', cdnr_matched, 'IGST')}",
+            f"={_get_total_cell('CDNR_Matched', cdnr_matched, 'CGST')}",
+            f"={_get_total_cell('CDNR_Matched', cdnr_matched, 'SGST')}",
+            f"={_get_total_cell('CDNR_Matched', cdnr_matched, 'Total Tax')}",
+        ],
+        [
+            "Books Not in 2B (CDNR)",
+            f"=COUNTA('CDNR_Books_Not_in_2B'!A2:A{max(2, tc(cdnr_un_books) + 1)})" if not cdnr_un_books.empty else 0,
+            f"={_get_total_cell('CDNR_Books_Not_in_2B', cdnr_un_books, 'Taxable Value')}",
+            f"={_get_total_cell('CDNR_Books_Not_in_2B', cdnr_un_books, 'IGST')}",
+            f"={_get_total_cell('CDNR_Books_Not_in_2B', cdnr_un_books, 'CGST')}",
+            f"={_get_total_cell('CDNR_Books_Not_in_2B', cdnr_un_books, 'SGST')}",
+            "=D28+E28+F28",
+        ],
+        [
+            "2B Not in Books (CDNR)",
+            f"=COUNTA('CDNR_2B_Not_in_Books'!A2:A{max(2, tc(cdnr_un_2b) + 1)})" if not cdnr_un_2b.empty else 0,
+            f"={_get_total_cell('CDNR_2B_Not_in_Books', cdnr_un_2b, 'Taxable Value')}",
+            f"={_get_total_cell('CDNR_2B_Not_in_Books', cdnr_un_2b, 'IGST')}",
+            f"={_get_total_cell('CDNR_2B_Not_in_Books', cdnr_un_2b, 'CGST')}",
+            f"={_get_total_cell('CDNR_2B_Not_in_Books', cdnr_un_2b, 'SGST')}",
+            "=D29+E29+F29",
+        ],
     ]
 
     df_summary = pd.DataFrame(summary_rows)
