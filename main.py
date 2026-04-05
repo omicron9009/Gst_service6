@@ -2,6 +2,9 @@
 import logging
 from contextlib import asynccontextmanager
 
+from dotenv import load_dotenv
+load_dotenv()
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -15,6 +18,7 @@ from routers.gstr_3B_router import router as gstr3b_router
 from routers.gstr_9_router import router as gstr9_router
 from routers.ledger_router import router as ledger_router
 from routers.gst_return_status_router import router as gst_return_status_router
+from routers.reconciliation_router import router as reconciliation_router
 from services.session_refresh_manager import start_scheduler, stop_scheduler
 
 logging.basicConfig(
@@ -48,6 +52,7 @@ app.include_router(gstr3b_router)
 app.include_router(gstr9_router)
 app.include_router(ledger_router)
 app.include_router(gst_return_status_router)
+app.include_router(reconciliation_router)
 
 
 @app.get("/health")

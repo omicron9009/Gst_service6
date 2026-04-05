@@ -27,10 +27,17 @@ export function AddClientModal({ open, onOpenChange }: Props) {
       setError('Invalid GSTIN format');
       return;
     }
+
+    // crypto.randomUUID() requires a secure context (HTTPS).
+    // crypto.getRandomValues() works over plain HTTP and is cryptographically strong.
+    const uuid = crypto.randomUUID?.()
+      ?? ([1e7] as any + -1e3 + -4e3 + -8e3 + -1e11).replace(/[018]/g, (c: number) =>
+        (c ^ (crypto.getRandomValues(new Uint8Array(1))[0] & (15 >> (c / 4)))).toString(16));
+
     dispatch({
       type: 'ADD_CLIENT',
       payload: {
-        id: crypto.randomUUID(),
+        id: uuid,
         label: label.trim(),
         username: username.trim(),
         gstin: gstin.toUpperCase().trim(),

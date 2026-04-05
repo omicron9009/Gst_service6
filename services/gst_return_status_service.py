@@ -16,6 +16,75 @@ from typing import Dict, Any, Optional
 from config import BASE_URL, API_KEY, API_VERSION
 from session_storage import get_session
 
+# Persistence
+from database.core.database import get_sync_db
+from database.models.client import Client
+from database.services.gst_return_status.models import GstReturnStatus
+
+
+def _get_or_create_client(gstin: str, session) -> Client:
+    client = session.query(Client).filter(Client.gstin == gstin).first()
+    if not client:
+        client = Client(gstin=gstin, username="", is_active=True)
+        session.add(client)
+        session.flush()
+    return client
+
+
+def _upsert_return_status(
+    db_session,
+    *,
+    client_id: int,
+    year: str,
+    month: str,
+    reference_id: str,
+    status_cd: Optional[str],
+    upstream_status_code: int,
+    form_type: Optional[str] = None,
+    form_type_label: Optional[str] = None,
+    action: Optional[str] = None,
+    processing_status: Optional[str] = None,
+    processing_status_label: Optional[str] = None,
+    has_errors: Optional[bool] = None,
+    error_report: Optional[dict[str, Any]] = None,
+) -> None:
+    existing = (
+        db_session.query(GstReturnStatus)
+        .filter(
+            GstReturnStatus.client_id == client_id,
+            GstReturnStatus.year == year,
+            GstReturnStatus.month == month,
+            GstReturnStatus.reference_id == reference_id,
+        )
+        .first()
+    )
+
+    values = {
+        "form_type": form_type,
+        "form_type_label": form_type_label,
+        "action": action,
+        "processing_status": processing_status,
+        "processing_status_label": processing_status_label,
+        "has_errors": has_errors,
+        "error_report": error_report,
+        "status_cd": status_cd,
+        "upstream_status_code": upstream_status_code,
+    }
+
+    if existing:
+        for field, value in values.items():
+            setattr(existing, field, value)
+    else:
+        db_session.add(
+            GstReturnStatus(
+                client_id=client_id,
+                year=year,
+                month=month,
+                reference_id=reference_id,
+                **values,
+            )
+        )
+
 
 def get_gst_return_status(gstin: str, year: str, month: str, reference_id: str) -> Dict[str, Any]:
 
@@ -47,13 +116,43 @@ def get_gst_return_status(gstin: str, year: str, month: str, reference_id: str) 
     # ── Outer status_cd = "0" → GST-level transport/auth error ───────────────
     if status_cd == "0":
         error_block = outer_data.get("error", {})
-        return {
+        result = {
             "success":    False,
             "status_cd":  "0",
             "error_code": error_block.get("error_cd"),
             "message":    error_block.get("message"),
             "raw":        payload,
         }
+
+        # Upsert by period + reference id to avoid duplicate status rows.
+        try:
+            db_session = get_sync_db()
+            try:
+                client = _get_or_create_client(gstin, db_session)
+                _upsert_return_status(
+                    db_session,
+                    client_id=client.id,
+                    year=year,
+                    month=month,
+                    reference_id=reference_id,
+                    status_cd="0",
+                    upstream_status_code=response.status_code,
+                    error_report={
+                        "error_code": result.get("error_code"),
+                        "error_message": result.get("message"),
+                    },
+                    has_errors=True,
+                )
+                db_session.commit()
+            except Exception as db_error:
+                db_session.rollback()
+                print(f"Database error saving GST return status error: {db_error}")
+            finally:
+                db_session.close()
+        except Exception as e:
+            print(f"Failed to get database session for GST return status error: {e}")
+
+        return result
 
     inner      = outer_data.get("data", {})
     action     = inner.get("action")          # "SAVE" | "RESET"
@@ -378,7 +477,7 @@ def get_gst_return_status(gstin: str, year: str, month: str, reference_id: str) 
             parsed["error_message"] = er.get("error_msg")
         return parsed
 
-    return {
+    result = {
         "success":        True,
         "status_cd":      status_cd,
 
@@ -405,5 +504,37 @@ def get_gst_return_status(gstin: str, year: str, month: str, reference_id: str) 
 
         "raw": payload,
     }
+
+    # Upsert by period + reference id so polling updates existing row.
+    try:
+        db_session = get_sync_db()
+        try:
+            client = _get_or_create_client(gstin, db_session)
+            _upsert_return_status(
+                db_session,
+                client_id=client.id,
+                year=year,
+                month=month,
+                reference_id=reference_id,
+                status_cd=status_cd,
+                upstream_status_code=response.status_code,
+                form_type=result.get("form_type"),
+                form_type_label=result.get("form_type_label"),
+                action=result.get("action"),
+                processing_status=result.get("processing_status"),
+                processing_status_label=result.get("processing_status_label"),
+                has_errors=result.get("has_errors"),
+                error_report=result.get("error_report"),
+            )
+            db_session.commit()
+        except Exception as db_error:
+            db_session.rollback()
+            print(f"Database error saving GST return status: {db_error}")
+        finally:
+            db_session.close()
+    except Exception as e:
+        print(f"Failed to get database session for GST return status: {e}")
+
+    return result
 
 

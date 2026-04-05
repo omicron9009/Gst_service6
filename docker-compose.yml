@@ -1,0 +1,22 @@
+version: "3.9"
+
+services:
+  gst-app:
+    build: .
+    ports:
+      - "8000:8000"   # Service API
+      - "8050:8050"   # DB Proxy
+      - "8080:8080"   # Frontend
+      - "5432:5432"   # PostgreSQL (optional, for external tools)
+    volumes:
+      - pg_data:/var/lib/postgresql        # PostgreSQL data survives container restarts
+      - session_data:/app/sessions         # Session JSON files survive container restarts
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:root@localhost:5432/gst_dash_test
+    restart: unless-stopped
+
+volumes:
+  pg_data:
+    driver: local
+  session_data:
+    driver: local

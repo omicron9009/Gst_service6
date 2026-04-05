@@ -10,6 +10,8 @@ import requests
 
 from config import API_KEY, API_SECRET, API_VERSION, BASE_URL
 from session_storage import get_session, save_session
+from database.core.database import get_sync_db
+from database.models.client import Client
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +25,30 @@ _platform_access_token_expiry_epoch: float = 0.0
 # Stores the authorization token used to generate OTP per (gstin, username)
 # so that verify uses the same auth context.
 _otp_auth_context: Dict[str, Dict[str, Any]] = {}
+
+
+def _ensure_client_in_db(gstin: str, username: str) -> None:
+    """Insert or update a Client row in PG so the DB proxy can list it."""
+    try:
+        db = get_sync_db()
+        try:
+            client = db.query(Client).filter(Client.gstin == gstin).first()
+            if client:
+                if username and not client.username:
+                    client.username = username
+                if not client.is_active:
+                    client.is_active = True
+            else:
+                client = Client(gstin=gstin, username=username or "", is_active=True)
+                db.add(client)
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+        finally:
+            db.close()
+    except Exception as exc:
+        logger.warning("ensure_client_in_db_failed gstin=%s error=%s", gstin[:4] + "***", exc)
 
 
 def _mask_gstin(gstin: str) -> str:
@@ -338,6 +364,7 @@ def verify_otp(username: str, gstin: str, otp: str) -> Dict[str, Any]:
 
     if api_success and token:
         save_session(gstin, token, refresh_token, token_expiry, session_expiry, username)
+        _ensure_client_in_db(gstin, username)
         session_saved = True
 
     success = api_success and session_saved
