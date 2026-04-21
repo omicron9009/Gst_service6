@@ -38,7 +38,7 @@
 import requests
 from typing import Dict, Any, Optional
 
-from config import BASE_URL, API_KEY, API_VERSION
+import config
 
 # BUG FIX: Single consistent import of get_session from the flat module (not services.session_storage_manager)
 from session_storage import get_session
@@ -110,12 +110,12 @@ def get_gstr1_advance_tax(gstin: str, year: str, month: str) -> Gstr1AdvanceTaxR
         )
 
     token = session.get("access_token")
-    url = f"{BASE_URL}/gst/compliance/tax-payer/gstrs/gstr-1/at/{year}/{month}"
+    url = f"{config.BASE_URL}/gst/compliance/tax-payer/gstrs/gstr-1/at/{year}/{month}"
 
     headers = {
         "Authorization": token,
-        "x-api-key": API_KEY,
-        "x-api-version": API_VERSION,
+        "x-api-key": config.API_KEY,
+        "x-api-version": config.API_VERSION,
         "x-source": "primary",
     }
 
@@ -215,12 +215,12 @@ def get_gstr1_b2b(
         return {"success": False, "message": "GST session not found"}
 
     token = session.get("access_token")
-    url = f"{BASE_URL}/gst/compliance/tax-payer/gstrs/gstr-1/b2b/{year}/{month}"
+    url = f"{config.BASE_URL}/gst/compliance/tax-payer/gstrs/gstr-1/b2b/{year}/{month}"
 
     headers = {
         "Authorization": token,
-        "x-api-key": API_KEY,
-        "x-api-version": API_VERSION,
+        "x-api-key": config.API_KEY,
+        "x-api-version": config.API_VERSION,
         "x-source": "primary",
     }
 
@@ -394,7 +394,7 @@ def get_gstr1_summary(gstin: str, year: str, month: str, summary_type: str = "sh
         return {"success": False, "message": "No active session found for GSTIN"}
 
     token = session["access_token"]
-    url = f"{BASE_URL}/gst/compliance/tax-payer/gstrs/gstr-1/{year}/{month}"
+    url = f"{config.BASE_URL}/gst/compliance/tax-payer/gstrs/gstr-1/{year}/{month}"
 
     params = {}
     if summary_type == "long":
@@ -402,8 +402,8 @@ def get_gstr1_summary(gstin: str, year: str, month: str, summary_type: str = "sh
 
     headers = {
         "Authorization": token,
-        "x-api-key": API_KEY,
-        "x-api-version": API_VERSION,
+        "x-api-key": config.API_KEY,
+        "x-api-version": config.API_VERSION,
         "x-source": "primary",
     }
 
@@ -515,12 +515,12 @@ def get_gstr1_b2csa(gstin: str, year: str, month: str) -> Dict[str, Any]:
 
     token = session.get("access_token")
 
-    url = f"{BASE_URL}/gst/compliance/tax-payer/gstrs/gstr-1/b2csa/{year}/{month}"
+    url = f"{config.BASE_URL}/gst/compliance/tax-payer/gstrs/gstr-1/b2csa/{year}/{month}"
 
     headers = {
         "Authorization": token,
-        "x-api-key": API_KEY,
-        "x-api-version": API_VERSION,
+        "x-api-key": config.API_KEY,
+        "x-api-version": config.API_VERSION,
         "x-source": "primary"
     }
 
@@ -632,12 +632,12 @@ def get_gstr1_b2cs(gstin: str, year: str, month: str) -> Dict[str, Any]:
 
     token = session.get("access_token")
 
-    url = f"{BASE_URL}/gst/compliance/tax-payer/gstrs/gstr-1/b2cs/{year}/{month}"
+    url = f"{config.BASE_URL}/gst/compliance/tax-payer/gstrs/gstr-1/b2cs/{year}/{month}"
 
     headers = {
         "Authorization": token,
-        "x-api-key": API_KEY,
-        "x-api-version": API_VERSION,
+        "x-api-key": config.API_KEY,
+        "x-api-version": config.API_VERSION,
         "x-source": "primary"
     }
 
@@ -747,12 +747,12 @@ def get_gstr1_cdnr(
 
     token = session.get("access_token")
 
-    url = f"{BASE_URL}/gst/compliance/tax-payer/gstrs/gstr-1/cdnr/{year}/{month}"
+    url = f"{config.BASE_URL}/gst/compliance/tax-payer/gstrs/gstr-1/cdnr/{year}/{month}"
 
     headers = {
         "Authorization": token,
-        "x-api-key": API_KEY,
-        "x-api-version": API_VERSION,
+        "x-api-key": config.API_KEY,
+        "x-api-version": config.API_VERSION,
         "x-source": "primary",
     }
 
@@ -915,11 +915,11 @@ def get_gstr1_doc_issue(gstin: str, year: str, month: str) -> Dict[str, Any]:
         }
 
     token = session.get("access_token")
-    url = f"{BASE_URL}/gst/compliance/tax-payer/gstrs/gstr-1/doc-issue/{year}/{month}"
+    url = f"{config.BASE_URL}/gst/compliance/tax-payer/gstrs/gstr-1/doc-issue/{year}/{month}"
     headers = {
         "Authorization": token,
-        "x-api-key": API_KEY,
-        "x-api-version": API_VERSION,
+        "x-api-key": config.API_KEY,
+        "x-api-version": config.API_VERSION,
         "x-source": "primary"
     }
 
@@ -1021,11 +1021,11 @@ def get_gstr1_hsn(gstin: str, year: str, month: str) -> Dict[str, Any]:
         }
 
     token = session.get("access_token")
-    url = f"{BASE_URL}/gst/compliance/tax-payer/gstrs/gstr-1/hsn/{year}/{month}"
+    url = f"{config.BASE_URL}/gst/compliance/tax-payer/gstrs/gstr-1/hsn/{year}/{month}"
     headers = {
         "Authorization": token,
-        "x-api-key": API_KEY,
-        "x-api-version": API_VERSION,
+        "x-api-key": config.API_KEY,
+        "x-api-version": config.API_VERSION,
         "x-source": "primary"
     }
 
@@ -1126,11 +1126,11 @@ def get_gstr1_nil(gstin: str, year: str, month: str) -> Dict[str, Any]:
         }
 
     token = session.get("access_token")
-    url = f"{BASE_URL}/gst/compliance/tax-payer/gstrs/gstr-1/nil/{year}/{month}"
+    url = f"{config.BASE_URL}/gst/compliance/tax-payer/gstrs/gstr-1/nil/{year}/{month}"
     headers = {
         "Authorization": token,
-        "x-api-key": API_KEY,
-        "x-api-version": API_VERSION,
+        "x-api-key": config.API_KEY,
+        "x-api-version": config.API_VERSION,
         "x-source": "primary"
     }
 
@@ -1236,11 +1236,11 @@ def get_gstr1_b2cl(gstin: str, year: str, month: str, state_code: str = None) ->
         }
 
     token = session.get("access_token")
-    url = f"{BASE_URL}/gst/compliance/tax-payer/gstrs/gstr-1/b2cl/{year}/{month}"
+    url = f"{config.BASE_URL}/gst/compliance/tax-payer/gstrs/gstr-1/b2cl/{year}/{month}"
     headers = {
         "Authorization": token,
-        "x-api-key": API_KEY,
-        "x-api-version": API_VERSION,
+        "x-api-key": config.API_KEY,
+        "x-api-version": config.API_VERSION,
         "x-source": "primary"
     }
 
@@ -1355,11 +1355,11 @@ def get_gstr1_cdnur(gstin: str, year: str, month: str) -> Dict[str, Any]:
         }
 
     token = session.get("access_token")
-    url = f"{BASE_URL}/gst/compliance/tax-payer/gstrs/gstr-1/cdnur/{year}/{month}"
+    url = f"{config.BASE_URL}/gst/compliance/tax-payer/gstrs/gstr-1/cdnur/{year}/{month}"
     headers = {
         "Authorization": token,
-        "x-api-key": API_KEY,
-        "x-api-version": API_VERSION,
+        "x-api-key": config.API_KEY,
+        "x-api-version": config.API_VERSION,
         "x-source": "primary"
     }
 
@@ -1486,11 +1486,11 @@ def get_gstr1_exp(gstin: str, year: str, month: str) -> Dict[str, Any]:
         }
 
     token = session.get("access_token")
-    url = f"{BASE_URL}/gst/compliance/tax-payer/gstrs/gstr-1/exp/{year}/{month}"
+    url = f"{config.BASE_URL}/gst/compliance/tax-payer/gstrs/gstr-1/exp/{year}/{month}"
     headers = {
         "Authorization": token,
-        "x-api-key": API_KEY,
-        "x-api-version": API_VERSION,
+        "x-api-key": config.API_KEY,
+        "x-api-version": config.API_VERSION,
         "x-source": "primary"
     }
 
@@ -1597,12 +1597,12 @@ def get_gstr1_txp(gstin: str, year: str, month: str, counterparty_gstin: Optiona
         return {"success": False, "message": "GST session not found"}
 
     token = session.get("access_token")
-    url = f"{BASE_URL}/gst/compliance/tax-payer/gstrs/gstr-1/txp/{year}/{month}"
+    url = f"{config.BASE_URL}/gst/compliance/tax-payer/gstrs/gstr-1/txp/{year}/{month}"
 
     headers = {
         "Authorization": token,
-        "x-api-key":     API_KEY,
-        "x-api-version": API_VERSION,
+        "x-api-key":     config.API_KEY,
+        "x-api-version": config.API_VERSION,
         "x-source":      "primary",
     }
 

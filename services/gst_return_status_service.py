@@ -13,7 +13,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 import requests
 from typing import Dict, Any, Optional
-from config import BASE_URL, API_KEY, API_VERSION
+import config
 from session_storage import get_session
 
 # Persistence
@@ -93,12 +93,12 @@ def get_gst_return_status(gstin: str, year: str, month: str, reference_id: str) 
         return {"success": False, "message": "GST session not found"}
 
     token = session.get("access_token")
-    url = f"{BASE_URL}/gst/compliance/tax-payer/gstrs/{year}/{month}/status"
+    url = f"{config.BASE_URL}/gst/compliance/tax-payer/gstrs/{year}/{month}/status"
 
     headers = {
         "Authorization": token,
-        "x-api-key":     API_KEY,
-        "x-api-version": API_VERSION,
+        "x-api-key":     config.API_KEY,
+        "x-api-version": config.API_VERSION,
         "x-source":      "primary",
     }
 

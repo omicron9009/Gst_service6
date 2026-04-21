@@ -19,6 +19,7 @@ from routers.gstr_9_router import router as gstr9_router
 from routers.ledger_router import router as ledger_router
 from routers.gst_return_status_router import router as gst_return_status_router
 from routers.reconciliation_router import router as reconciliation_router
+from routers.settings_router import router as settings_router
 from services.session_refresh_manager import start_scheduler, stop_scheduler
 
 logging.basicConfig(
@@ -53,6 +54,7 @@ app.include_router(gstr9_router)
 app.include_router(ledger_router)
 app.include_router(gst_return_status_router)
 app.include_router(reconciliation_router)
+app.include_router(settings_router)
 
 
 @app.get("/health")

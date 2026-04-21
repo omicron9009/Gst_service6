@@ -1,22 +1,29 @@
 version: "3.9"
 
 services:
-  gst-app:
-    build: .
+  gst-service:
+    image: omicron9009/gst-service-all-in-one
+    container_name: gst-service-apikey-test
+    stdin_open: true
+    tty: true
     ports:
       - "8000:8000"   # Service API
       - "8050:8050"   # DB Proxy
       - "8080:8080"   # Frontend
-      - "5432:5432"   # PostgreSQL (optional, for external tools)
+      - "5433:5432"   # PostgreSQL (external access)
     volumes:
-      - pg_data:/var/lib/postgresql        # PostgreSQL data survives container restarts
-      - session_data:/app/sessions         # Session JSON files survive container restarts
+      - gst-pgdata:/var/lib/postgresql
+      - gst-sessions:/app/sessions
     environment:
-      - DATABASE_URL=postgresql+asyncpg://postgres:root@localhost:5432/gst_dash_test
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=root
+      - POSTGRES_DB=gst_dash_test
+      - GSTIN=27AABFP2335E1ZM
+      - USERNAME=Pgjcoca_1
     restart: unless-stopped
 
 volumes:
-  pg_data:
+  gst-pgdata:
     driver: local
-  session_data:
+  gst-sessions:
     driver: local

@@ -183,3 +183,22 @@ export async function testDbProxy(): Promise<boolean> {
     return false;
   }
 }
+
+// --- Sandbox API Credentials ---
+
+export async function getApiCredentials(): Promise<{ has_credentials: boolean; api_key: string; api_secret: string }> {
+  const settings = getSettings();
+  const res = await fetch(`${settings.serviceApiUrl}/settings/api-credentials`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function saveApiCredentials(apiKey: string, apiSecret: string): Promise<void> {
+  const settings = getSettings();
+  const res = await fetch(`${settings.serviceApiUrl}/settings/api-credentials`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ api_key: apiKey, api_secret: apiSecret }),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+}

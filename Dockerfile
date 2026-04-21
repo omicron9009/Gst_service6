@@ -25,8 +25,9 @@ COPY . .
 # Make the start scripts executable
 RUN chmod +x /app/start.sh /app/start_safe.sh
 
-# Persist PostgreSQL data across container restarts
+# Persist PostgreSQL data and sessions across container restarts
 VOLUME /var/lib/postgresql
+VOLUME /app/sessions
 
 # Expose ports: API (8000), DB Proxy (8050), Frontend (8080), and DB (5432)
 EXPOSE 8000 8050 8080 5432

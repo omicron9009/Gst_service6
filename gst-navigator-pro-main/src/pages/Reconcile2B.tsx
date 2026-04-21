@@ -9,7 +9,8 @@ import { DataTable } from '@/components/dashboard/DataTable';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { Upload, Download, FileText, CheckCircle2, XCircle, Loader2, RefreshCw } from 'lucide-react';
+import { Label } from '@/components/ui/label';
+import { Upload, Download, FileText, CheckCircle2, XCircle, Loader2, RefreshCw, Columns } from 'lucide-react';
 
 interface SectionResult {
   summary: Record<string, number>;
@@ -35,6 +36,17 @@ interface Check2BInfo {
   response_type: string | null;
   gen_date: string | null;
 }
+
+interface ExtractColumnsResult {
+  books_columns: string[];
+  t2b_columns: string[];
+  books_mapping: Record<string, string>;
+  t2b_mapping: Record<string, string>;
+  required_fields: string[];
+}
+
+const REQUIRED_FIELDS = ["GSTIN", "Party Name", "Invoice No", "Invoice Date",
+                         "Taxable Value", "CGST", "SGST", "IGST"];
 
 const MATCHED_COLUMNS = [
   { key: 'GSTIN', label: 'GSTIN', type: 'text' as const },
@@ -72,6 +84,14 @@ export default function Reconcile2B() {
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<ReconciliationResult | null>(null);
 
+  // Column mapping state
+  const [extracting, setExtracting] = useState(false);
+  const [showMapping, setShowMapping] = useState(false);
+  const [booksColumns, setBooksColumns] = useState<string[]>([]);
+  const [t2bColumns, setT2bColumns] = useState<string[]>([]);
+  const [booksMapping, setBooksMapping] = useState<Record<string, string>>({});
+  const [t2bMapping, setT2bMapping] = useState<Record<string, string>>({});
+
   const gstin = activeClient?.gstin;
   const period = state.selectedPeriod;
 
@@ -105,6 +125,36 @@ export default function Reconcile2B() {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] || null;
     setBooksFile(file);
+    // Reset mapping when a new file is chosen
+    setShowMapping(false);
+    setBooksColumns([]);
+    setT2bColumns([]);
+    setBooksMapping({});
+    setT2bMapping({});
+    setResult(null);
+  };
+
+  const handleExtractColumns = async () => {
+    if (!gstin || !period || !booksFile) return;
+    setExtracting(true);
+    try {
+      const formData = new FormData();
+      formData.append('books_file', booksFile);
+      const res: ExtractColumnsResult = await servicePostFormData(
+        `/reconciliation/extract-columns/${gstin}/${period.year}/${period.month}`,
+        formData
+      );
+      setBooksColumns(res.books_columns);
+      setT2bColumns(res.t2b_columns);
+      setBooksMapping(res.books_mapping);  // {standard_field: original_col}
+      setT2bMapping(res.t2b_mapping);
+      setShowMapping(true);
+      toast({ title: 'Columns extracted', description: `${res.books_columns.length} books columns, ${res.t2b_columns.length} 2B columns.` });
+    } catch (err: any) {
+      toast({ title: 'Extract failed', description: err?.message || 'Could not extract columns', variant: 'destructive' });
+    } finally {
+      setExtracting(false);
+    }
   };
 
   const handleRunReconciliation = async () => {
@@ -114,6 +164,11 @@ export default function Reconcile2B() {
     try {
       const formData = new FormData();
       formData.append('books_file', booksFile);
+      // Send column mappings if available
+      if (showMapping) {
+        formData.append('books_mapping_json', JSON.stringify(booksMapping));
+        formData.append('t2b_mapping_json', JSON.stringify(t2bMapping));
+      }
       const res = await servicePostFormData(
         `/reconciliation/run/${gstin}/${period.year}/${period.month}`,
         formData
@@ -229,8 +284,64 @@ export default function Reconcile2B() {
                         {booksFile.name} ({(booksFile.size / 1024).toFixed(1)} KB)
                       </span>
                     )}
+                    {booksFile && check2b?.available && !showMapping && (
+                      <Button size="sm" variant="secondary" onClick={handleExtractColumns} disabled={extracting}>
+                        {extracting ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <Columns className="h-3.5 w-3.5 mr-1.5" />}
+                        Extract & Map Columns
+                      </Button>
+                    )}
                   </div>
                 </div>
+
+                {/* Column Mapping Panel */}
+                {showMapping && (
+                  <div className="rounded-lg border bg-card p-4 space-y-4">
+                    <h2 className="text-sm font-semibold">Map Headers</h2>
+                    <p className="text-xs text-muted-foreground">
+                      Verify column mappings below. The system auto-detected the best matches. Override any incorrect mappings.
+                    </p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {/* Books Column Mapping */}
+                      <div className="space-y-3">
+                        <h3 className="text-xs font-semibold uppercase text-muted-foreground">Books Headers</h3>
+                        {REQUIRED_FIELDS.map((field) => (
+                          <div key={`b_${field}`} className="space-y-1">
+                            <Label className="text-xs">{field}</Label>
+                            <select
+                              className="w-full rounded-md border bg-background px-3 py-1.5 text-sm"
+                              value={booksMapping[field] || ''}
+                              onChange={(e) => setBooksMapping({ ...booksMapping, [field]: e.target.value })}
+                            >
+                              <option value="">— Not mapped —</option>
+                              {booksColumns.map((col) => (
+                                <option key={col} value={col}>{col}</option>
+                              ))}
+                            </select>
+                          </div>
+                        ))}
+                      </div>
+                      {/* 2B Column Mapping */}
+                      <div className="space-y-3">
+                        <h3 className="text-xs font-semibold uppercase text-muted-foreground">2B Headers</h3>
+                        {REQUIRED_FIELDS.map((field) => (
+                          <div key={`t_${field}`} className="space-y-1">
+                            <Label className="text-xs">{field}</Label>
+                            <select
+                              className="w-full rounded-md border bg-background px-3 py-1.5 text-sm"
+                              value={t2bMapping[field] || ''}
+                              onChange={(e) => setT2bMapping({ ...t2bMapping, [field]: e.target.value })}
+                            >
+                              <option value="">— Not mapped —</option>
+                              {t2bColumns.map((col) => (
+                                <option key={col} value={col}>{col}</option>
+                              ))}
+                            </select>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Run Button */}
                 <div className="flex items-center gap-3">
@@ -239,10 +350,15 @@ export default function Reconcile2B() {
                     disabled={running || !booksFile || !check2b?.available}
                   >
                     {running ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <FileText className="h-4 w-4 mr-2" />}
-                    Run Reconciliation
+                    {showMapping ? 'Confirm & Run Reconciliation' : 'Run Reconciliation'}
                   </Button>
                   {!check2b?.available && booksFile && (
                     <span className="text-xs text-muted-foreground">Check or fetch 2B data first</span>
+                  )}
+                  {showMapping && (
+                    <Button variant="ghost" size="sm" onClick={() => setShowMapping(false)}>
+                      Skip Mapping
+                    </Button>
                   )}
                 </div>
 

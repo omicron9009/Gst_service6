@@ -1,6 +1,6 @@
 import requests
 from typing import Dict, Any, Optional
-from config import BASE_URL, API_KEY, API_VERSION
+import config
 from session_storage import get_session
 from services.ledger_service import *
 from fastapi import APIRouter , HTTPException, Query

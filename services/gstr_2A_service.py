@@ -21,7 +21,7 @@
 
 import requests
 from typing import Dict, Any, Optional
-from config import BASE_URL, API_KEY, API_VERSION
+import config
 from session_storage import get_session
 
 # Persistence
@@ -52,11 +52,11 @@ def get_gstr2a_b2b(gstin: str, year: str, month: str) -> Dict[str, Any]:
         }
 
     token = session.get("access_token")
-    url = f"{BASE_URL}/gst/compliance/tax-payer/gstrs/gstr-2a/b2b/{year}/{month}"
+    url = f"{config.BASE_URL}/gst/compliance/tax-payer/gstrs/gstr-2a/b2b/{year}/{month}"
     headers = {
         "Authorization": token,
-        "x-api-key": API_KEY,
-        "x-api-version": API_VERSION,
+        "x-api-key": config.API_KEY,
+        "x-api-version": config.API_VERSION,
         "x-source": "primary"
     }
 
@@ -202,11 +202,11 @@ def get_gstr2a_b2ba(gstin: str, year: str, month: str, counterparty_gstin: str =
         }
 
     token = session.get("access_token")
-    url = f"{BASE_URL}/gst/compliance/tax-payer/gstrs/gstr-2a/b2ba/{year}/{month}"
+    url = f"{config.BASE_URL}/gst/compliance/tax-payer/gstrs/gstr-2a/b2ba/{year}/{month}"
     headers = {
         "Authorization": token,
-        "x-api-key": API_KEY,
-        "x-api-version": API_VERSION,
+        "x-api-key": config.API_KEY,
+        "x-api-version": config.API_VERSION,
         "x-source": "primary"
     }
 
@@ -305,11 +305,11 @@ def get_gstr2a_cdn(gstin: str, year: str, month: str, counterparty_gstin: str = 
         }
 
     token = session.get("access_token")
-    url = f"{BASE_URL}/gst/compliance/tax-payer/gstrs/gstr-2a/cdn/{year}/{month}"
+    url = f"{config.BASE_URL}/gst/compliance/tax-payer/gstrs/gstr-2a/cdn/{year}/{month}"
     headers = {
         "Authorization": token,
-        "x-api-key": API_KEY,
-        "x-api-version": API_VERSION,
+        "x-api-key": config.API_KEY,
+        "x-api-version": config.API_VERSION,
         "x-source": "primary"
     }
 
@@ -412,11 +412,11 @@ def get_gstr2a_cdna(gstin: str, year: str, month: str, counterparty_gstin: str =
         }
 
     token = session.get("access_token")
-    url = f"{BASE_URL}/gst/compliance/tax-payer/gstrs/gstr-2a/cdna/{year}/{month}"
+    url = f"{config.BASE_URL}/gst/compliance/tax-payer/gstrs/gstr-2a/cdna/{year}/{month}"
     headers = {
         "Authorization": token,
-        "x-api-key": API_KEY,
-        "x-api-version": API_VERSION,
+        "x-api-key": config.API_KEY,
+        "x-api-version": config.API_VERSION,
         "x-source": "primary"
     }
 
@@ -514,11 +514,11 @@ def get_gstr2a_document(gstin: str, year: str, month: str) -> Dict[str, Any]:
         }
 
     token = session.get("access_token")
-    url = f"{BASE_URL}/gst/compliance/tax-payer/gstrs/gstr-2a/{year}/{month}"
+    url = f"{config.BASE_URL}/gst/compliance/tax-payer/gstrs/gstr-2a/{year}/{month}"
     headers = {
         "Authorization": token,
-        "x-api-key": API_KEY,
-        "x-api-version": API_VERSION,
+        "x-api-key": config.API_KEY,
+        "x-api-version": config.API_VERSION,
         "x-source": "primary"
     }
 
@@ -677,11 +677,11 @@ def get_gstr2a_isd(gstin: str, year: str, month: str, counterparty_gstin: str = 
         }
 
     token = session.get("access_token")
-    url = f"{BASE_URL}/gst/compliance/tax-payer/gstrs/gstr-2a/isd/{year}/{month}"
+    url = f"{config.BASE_URL}/gst/compliance/tax-payer/gstrs/gstr-2a/isd/{year}/{month}"
     headers = {
         "Authorization": token,
-        "x-api-key": API_KEY,
-        "x-api-version": API_VERSION,
+        "x-api-key": config.API_KEY,
+        "x-api-version": config.API_VERSION,
         "x-source": "primary"
     }
 
@@ -751,12 +751,12 @@ def get_gstr2a_tds(gstin: str, year: str, month: str) -> Dict[str, Any]:
         return {"success": False, "message": "GST session not found"}
 
     token = session.get("access_token")
-    url = f"{BASE_URL}/gst/compliance/tax-payer/gstrs/gstr-2a/tds/{year}/{month}"
+    url = f"{config.BASE_URL}/gst/compliance/tax-payer/gstrs/gstr-2a/tds/{year}/{month}"
 
     headers = {
         "Authorization": token,
-        "x-api-key":     API_KEY,
-        "x-api-version": API_VERSION,
+        "x-api-key":     config.API_KEY,
+        "x-api-version": config.API_VERSION,
         "x-source":      "primary",
     }
 

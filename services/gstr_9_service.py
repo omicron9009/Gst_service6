@@ -1,6 +1,6 @@
 import requests
 from typing import Dict, Any, Optional
-from config import BASE_URL, API_KEY, API_VERSION
+import config
 from session_storage import get_session
 
 # Persistence
@@ -25,12 +25,12 @@ def get_gstr9_auto_calculated(gstin: str, financial_year: str) -> Dict[str, Any]
         return {"success": False, "message": "GST session not found"}
 
     token = session.get("access_token")
-    url = f"{BASE_URL}/gst/compliance/tax-payer/gstrs/gstr-9/auto-calculated"
+    url = f"{config.BASE_URL}/gst/compliance/tax-payer/gstrs/gstr-9/auto-calculated"
 
     headers = {
         "Authorization": token,
-        "x-api-key":     API_KEY,
-        "x-api-version": API_VERSION,
+        "x-api-key":     config.API_KEY,
+        "x-api-version": config.API_VERSION,
         "x-source":      "primary",
     }
 
@@ -268,12 +268,12 @@ def get_gstr9_table8a(gstin: str, financial_year: str, file_number: Optional[str
         return {"success": False, "message": "GST session not found"}
 
     token = session.get("access_token")
-    url = f"{BASE_URL}/gst/compliance/tax-payer/gstrs/gstr-9/table-8a"
+    url = f"{config.BASE_URL}/gst/compliance/tax-payer/gstrs/gstr-9/table-8a"
 
     headers = {
         "Authorization": token,
-        "x-api-key":     API_KEY,
-        "x-api-version": API_VERSION,
+        "x-api-key":     config.API_KEY,
+        "x-api-version": config.API_VERSION,
         "x-source":      "primary",
     }
 
@@ -409,12 +409,12 @@ def get_gstr9_details(gstin: str, financial_year: str) -> Dict[str, Any]:
         return {"success": False, "message": "GST session not found"}
 
     token = session.get("access_token")
-    url = f"{BASE_URL}/gst/compliance/tax-payer/gstrs/gstr-9"
+    url = f"{config.BASE_URL}/gst/compliance/tax-payer/gstrs/gstr-9"
 
     headers = {
         "Authorization": token,
-        "x-api-key":     API_KEY,
-        "x-api-version": API_VERSION,
+        "x-api-key":     config.API_KEY,
+        "x-api-version": config.API_VERSION,
         "x-source":      "primary",
     }
 

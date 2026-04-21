@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useApp } from '@/context/AppContext';
 import type { AppSettings } from '@/types/client';
-import { testServiceApi, testDbProxy } from '@/lib/api';
+import { testServiceApi, testDbProxy, getApiCredentials, saveApiCredentials } from '@/lib/api';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,10 +21,52 @@ export function SettingsPanel({ open, onOpenChange }: Props) {
   const [testingService, setTestingService] = useState(false);
   const [testingDb, setTestingDb] = useState(false);
 
+  // Sandbox API credentials (server-side, not in AppSettings)
+  const [sandboxApiKey, setSandboxApiKey] = useState('');
+  const [sandboxApiSecret, setSandboxApiSecret] = useState('');
+  const [credHint, setCredHint] = useState('');
+  const [savingCreds, setSavingCreds] = useState(false);
+
+  // Load credential status when the panel opens
+  useEffect(() => {
+    if (!open) return;
+    getApiCredentials()
+      .then(({ has_credentials, api_key, api_secret }) => {
+        if (has_credentials) {
+          setSandboxApiKey(api_key);
+          setSandboxApiSecret(api_secret);
+          setCredHint(api_key);
+        } else {
+          setCredHint('');
+        }
+      })
+      .catch(() => setCredHint(''));
+  }, [open]);
+
   const handleSave = () => {
     dispatch({ type: 'SET_SETTINGS', payload: form });
     toast({ title: 'Settings saved' });
     onOpenChange(false);
+  };
+
+  const handleSaveCredentials = async () => {
+    if (!sandboxApiKey.trim() || !sandboxApiSecret.trim()) {
+      toast({ title: 'Both API Key and Secret are required', variant: 'destructive' });
+      return;
+    }
+    setSavingCreds(true);
+    try {
+      await saveApiCredentials(sandboxApiKey.trim(), sandboxApiSecret.trim());
+      toast({ title: 'API Credentials saved ✓' });
+      setSandboxApiKey('');
+      setSandboxApiSecret('');
+      // Refresh hint
+      const { api_key } = await getApiCredentials();
+      setCredHint(api_key);
+    } catch {
+      toast({ title: 'Failed to save credentials', variant: 'destructive' });
+    }
+    setSavingCreds(false);
   };
 
   const handleTestService = async () => {
@@ -88,6 +130,35 @@ export function SettingsPanel({ open, onOpenChange }: Props) {
             </div>
             <Button variant="outline" size="sm" onClick={handleTestDb} disabled={testingDb}>
               {testingDb ? 'Testing...' : 'Test Connection'}
+            </Button>
+          </div>
+
+          <div className="rounded-lg border p-4 space-y-4">
+            <h3 className="text-sm font-semibold">Sandbox API Credentials</h3>
+            {credHint && (
+              <p className="text-xs text-muted-foreground">
+                Current key: <span className="font-mono">{credHint}</span>
+              </p>
+            )}
+            <div className="space-y-1.5">
+              <Label>API Key</Label>
+              <Input
+                placeholder="key_live_..."
+                value={sandboxApiKey}
+                onChange={e => setSandboxApiKey(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>API Secret</Label>
+              <Input
+                type="password"
+                placeholder="secret_live_..."
+                value={sandboxApiSecret}
+                onChange={e => setSandboxApiSecret(e.target.value)}
+              />
+            </div>
+            <Button variant="outline" size="sm" onClick={handleSaveCredentials} disabled={savingCreds}>
+              {savingCreds ? 'Saving...' : 'Save Credentials'}
             </Button>
           </div>
 

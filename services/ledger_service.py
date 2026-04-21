@@ -4,7 +4,7 @@
 
 import requests
 from typing import Dict, Any, Optional
-from config import BASE_URL, API_KEY, API_VERSION
+import config
 from session_storage import get_session
 
 # Persistence helpers
@@ -29,12 +29,12 @@ def get_cash_itc_balance(gstin: str, year: str, month: str) -> Dict[str, Any]:
         return {"success": False, "message": "GST session not found"}
 
     token = session.get("access_token")
-    url = f"{BASE_URL}/gst/compliance/tax-payer/ledgers/bal/{year}/{month}"
+    url = f"{config.BASE_URL}/gst/compliance/tax-payer/ledgers/bal/{year}/{month}"
 
     headers = {
         "Authorization": token,
-        "x-api-key":     API_KEY,
-        "x-api-version": API_VERSION,
+        "x-api-key":     config.API_KEY,
+        "x-api-version": config.API_VERSION,
         "x-source":      "primary",
     }
 
@@ -188,12 +188,12 @@ def get_cash_ledger(gstin: str, from_date: str, to_date: str) -> Dict[str, Any]:
         return {"success": False, "message": "GST session not found"}
 
     token = session.get("access_token")
-    url = f"{BASE_URL}/gst/compliance/tax-payer/ledgers/cash"
+    url = f"{config.BASE_URL}/gst/compliance/tax-payer/ledgers/cash"
 
     headers = {
         "Authorization": token,
-        "x-api-key":     API_KEY,
-        "x-api-version": API_VERSION,
+        "x-api-key":     config.API_KEY,
+        "x-api-version": config.API_VERSION,
         "x-source":      "primary",
     }
 
@@ -372,12 +372,12 @@ def get_itc_ledger(gstin: str, from_date: str, to_date: str) -> Dict[str, Any]:
         return {"success": False, "message": "GST session not found"}
 
     token = session.get("access_token")
-    url = f"{BASE_URL}/gst/compliance/tax-payer/ledgers/itc"
+    url = f"{config.BASE_URL}/gst/compliance/tax-payer/ledgers/itc"
 
     headers = {
         "Authorization": token,
-        "x-api-key":     API_KEY,
-        "x-api-version": API_VERSION,
+        "x-api-key":     config.API_KEY,
+        "x-api-version": config.API_VERSION,
         "x-source":      "primary",
     }
 
@@ -557,12 +557,12 @@ def get_return_liability_ledger(gstin: str, year: str, month: str, from_date: st
         return {"success": False, "message": "GST session not found"}
 
     token = session.get("access_token")
-    url = f"{BASE_URL}/gst/compliance/tax-payer/ledgers/tax/{year}/{month}"
+    url = f"{config.BASE_URL}/gst/compliance/tax-payer/ledgers/tax/{year}/{month}"
 
     headers = {
         "Authorization": token,
-        "x-api-key":     API_KEY,
-        "x-api-version": API_VERSION,
+        "x-api-key":     config.API_KEY,
+        "x-api-version": config.API_VERSION,
         "x-source":      "primary",
     }
 
