@@ -8,8 +8,10 @@ from urllib.parse import urlencode
 
 import requests
 
-from config import API_KEY, API_SECRET, API_VERSION, BASE_URL
+import config
 from session_storage import get_session, save_session
+from database.core.database import get_sync_db
+from database.models.client import Client
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +25,37 @@ _platform_access_token_expiry_epoch: float = 0.0
 # Stores the authorization token used to generate OTP per (gstin, username)
 # so that verify uses the same auth context.
 _otp_auth_context: Dict[str, Dict[str, Any]] = {}
+
+
+def invalidate_platform_token() -> None:
+    """Clear the cached Sandbox platform token so the next call re-authenticates."""
+    global _platform_access_token, _platform_access_token_expiry_epoch
+    _platform_access_token = None
+    _platform_access_token_expiry_epoch = 0.0
+
+
+def _ensure_client_in_db(gstin: str, username: str) -> None:
+    """Insert or update a Client row in PG so the DB proxy can list it."""
+    try:
+        db = get_sync_db()
+        try:
+            client = db.query(Client).filter(Client.gstin == gstin).first()
+            if client:
+                if username and not client.username:
+                    client.username = username
+                if not client.is_active:
+                    client.is_active = True
+            else:
+                client = Client(gstin=gstin, username=username or "", is_active=True)
+                db.add(client)
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+        finally:
+            db.close()
+    except Exception as exc:
+        logger.warning("ensure_client_in_db_failed gstin=%s error=%s", gstin[:4] + "***", exc)
 
 
 def _mask_gstin(gstin: str) -> str:
@@ -143,11 +176,11 @@ def _authenticate_platform(force_refresh: bool = False) -> str:
     if not force_refresh and _platform_access_token and now < _platform_access_token_expiry_epoch:
         return _platform_access_token
 
-    auth_url = f"{BASE_URL}/authenticate"
+    auth_url = f"{config.BASE_URL}/authenticate"
     auth_headers = {
-        "x-api-key": API_KEY,
-        "x-api-secret": API_SECRET,
-        "x-api-version": API_VERSION,
+        "x-api-key": config.API_KEY,
+        "x-api-secret": config.API_SECRET,
+        "x-api-version": config.API_VERSION,
     }
 
     try:
@@ -180,8 +213,8 @@ def _authenticate_platform(force_refresh: bool = False) -> str:
 def _platform_headers_with_token(token: str) -> Dict[str, str]:
     return {
         "Authorization": token,
-        "x-api-key": API_KEY,
-        "x-api-version": API_VERSION,
+        "x-api-key": config.API_KEY,
+        "x-api-version": config.API_VERSION,
         "x-source": "primary",
         "Content-Type": "application/json",
     }
@@ -239,7 +272,7 @@ def generate_otp(username: str, gstin: str) -> Dict[str, Any]:
 
     logger.info("otp_generate_started gstin=%s username=%s", masked_gstin, username)
 
-    url = f"{BASE_URL}/gst/compliance/tax-payer/otp"
+    url = f"{config.BASE_URL}/gst/compliance/tax-payer/otp"
     payload = {"username": username, "gstin": gstin}
 
     try:
@@ -294,7 +327,7 @@ def verify_otp(username: str, gstin: str, otp: str) -> Dict[str, Any]:
     logger.info("otp_verify_started gstin=%s username=%s", masked_gstin, username)
 
     # OTP is a query parameter as per the current Sandbox API docs.
-    url = f"{BASE_URL}/gst/compliance/tax-payer/otp/verify?{urlencode({'otp': otp})}"
+    url = f"{config.BASE_URL}/gst/compliance/tax-payer/otp/verify?{urlencode({'otp': otp})}"
     payload = {"username": username, "gstin": gstin}
 
     otp_context_token = _get_otp_context_token(username, gstin)
@@ -338,6 +371,7 @@ def verify_otp(username: str, gstin: str, otp: str) -> Dict[str, Any]:
 
     if api_success and token:
         save_session(gstin, token, refresh_token, token_expiry, session_expiry, username)
+        _ensure_client_in_db(gstin, username)
         session_saved = True
 
     success = api_success and session_saved
@@ -392,11 +426,11 @@ def refresh_session(gstin: str) -> Dict[str, Any]:
             "message": "No active session found for GSTIN. Verify OTP first.",
         }
 
-    url = f"{BASE_URL}/gst/compliance/tax-payer/session/refresh"
+    url = f"{config.BASE_URL}/gst/compliance/tax-payer/session/refresh"
     headers = {
         "Authorization": session["access_token"],
-        "x-api-key": API_KEY,
-        "x-api-version": API_VERSION,
+        "x-api-key": config.API_KEY,
+        "x-api-version": config.API_VERSION,
         "x-source": "primary",
     }
 

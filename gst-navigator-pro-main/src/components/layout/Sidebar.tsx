@@ -40,7 +40,7 @@ export function Sidebar() {
         <ScrollArea className="flex-1 px-3">
           {state.clients.length === 0 ? (
             <div className="px-2 py-8 text-center text-sm text-[hsl(var(--sidebar-fg)/0.4)]">
-              No clients added yet
+              No clients found in database
             </div>
           ) : (
             <div className="space-y-1">

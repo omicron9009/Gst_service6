@@ -1,0 +1,15 @@
+fastapi==0.118.1
+uvicorn[standard]==0.37.0
+requests==2.32.5
+pydantic==2.12.0
+SQLAlchemy==2.0.43
+asyncpg==0.31.0
+psycopg2-binary==2.9.11
+pymysql
+python-dotenv==1.1.1
+python-multipart==0.0.20
+dotenv
+rapidfuzz
+xlsxwriter
+pandas
+openpyxl

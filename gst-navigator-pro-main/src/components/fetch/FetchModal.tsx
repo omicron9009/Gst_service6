@@ -28,7 +28,8 @@ const MONTHS = Array.from({ length: 12 }, (_, i) => ({ value: String(i + 1).padS
 
 export function FetchModal({ open, onOpenChange }: Props) {
   const { activeClient } = useApp();
-  const { refreshData } = useDbProxy();
+  const { refreshData, loadAvailablePeriods } = useDbProxy();
+  const { dispatch } = useApp();
   const { toast } = useToast();
 
   const [year, setYear] = useState(String(new Date().getFullYear()));
@@ -50,6 +51,15 @@ export function FetchModal({ open, onOpenChange }: Props) {
 
   const gstin = activeClient.gstin;
   const token = activeClient.sessionToken;
+
+  // After any fetch group completes, refresh DB data for the fetched period
+  // and reload available periods so the new period appears in the selector.
+  const postFetchRefresh = async () => {
+    // Set the selected period to the one just fetched so the dashboard shows it
+    dispatch({ type: 'SET_SELECTED_PERIOD', payload: { year, month } });
+    await loadAvailablePeriods(gstin);
+    await refreshData(gstin, year, month);
+  };
 
   const updateStatus = (id: string, status: CallStatus['status'], message?: string) => {
     setStatuses(prev => prev.map(s => s.id === id ? { ...s, status, message } : s));
@@ -98,6 +108,7 @@ export function FetchModal({ open, onOpenChange }: Props) {
       { id: 'g1-txp', label: 'GSTR-1 TXP', path: `/gstr1/gstr1/${gstin}/${year}/${month}/txp${buildQS({ counterparty_gstin: counterpartyGstin, action_required: actionRequired, from: fromDate })}` },
     ];
     await runGroup(calls);
+    await postFetchRefresh();
   };
 
   const handleFetchGstr2a = async () => {
@@ -111,6 +122,7 @@ export function FetchModal({ open, onOpenChange }: Props) {
       { id: 'g2a-tds', label: 'GSTR-2A TDS', path: `/gstr2A/gstr2a/${gstin}/${year}/${month}/tds` },
     ];
     await runGroup(calls);
+    await postFetchRefresh();
   };
 
   const handleFetchGstr2b = async () => {
@@ -121,6 +133,7 @@ export function FetchModal({ open, onOpenChange }: Props) {
       calls.push({ id: 'g2b-regen', label: 'GSTR-2B Regen Status', path: `/gstr2B/gstr2b/${gstin}/regenerate/status?reference_id=${encodeURIComponent(referenceId)}` });
     }
     await runGroup(calls);
+    await postFetchRefresh();
   };
 
   const handleFetchGstr3b = async () => {
@@ -129,6 +142,7 @@ export function FetchModal({ open, onOpenChange }: Props) {
       { id: 'g3b-auto', label: 'GSTR-3B Auto Liability', path: `/gstr3B/gstr3b/${gstin}/${year}/${month}/auto-liability-calc` },
     ];
     await runGroup(calls);
+    await postFetchRefresh();
   };
 
   const handleFetchGstr9 = async () => {
@@ -140,6 +154,7 @@ export function FetchModal({ open, onOpenChange }: Props) {
       calls.push({ id: 'g9-8a', label: 'GSTR-9 Table 8A', path: `/gstr9/gstr9/${gstin}/table-8a?financial_year=${encodeURIComponent(fy)}&file_number=${fileNumber}` });
     }
     await runGroup(calls);
+    await postFetchRefresh();
   };
 
   const handleFetchReturnStatus = async () => {
@@ -147,6 +162,7 @@ export function FetchModal({ open, onOpenChange }: Props) {
     await runGroup([{
       id: 'ret-status', label: 'Return Status', path: `/return_status/returns/${gstin}/${year}/${month}/status?reference_id=${encodeURIComponent(referenceId)}`
     }]);
+    await postFetchRefresh();
   };
 
   const handleFetchLedgers = async () => {
@@ -161,6 +177,7 @@ export function FetchModal({ open, onOpenChange }: Props) {
       );
     }
     await runGroup(calls);
+    await postFetchRefresh();
   };
 
   const handleFetchAll = async () => {
@@ -172,7 +189,7 @@ export function FetchModal({ open, onOpenChange }: Props) {
     await handleFetchGstr3b();
     await handleFetchGstr9();
     await handleFetchLedgers();
-    await refreshData();
+    await postFetchRefresh();
     setRunning(false);
     toast({ title: 'Fetch Complete', description: 'All data has been fetched and refreshed from DB' });
   };

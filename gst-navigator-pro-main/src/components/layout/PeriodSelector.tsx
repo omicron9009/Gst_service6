@@ -1,9 +1,12 @@
 import { useMemo } from 'react';
 import { useApp } from '@/context/AppContext';
+import { useDbProxy } from '@/hooks/useDbProxy';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Button } from '@/components/ui/button';
 
 export function PeriodSelector() {
-  const { state, dispatch } = useApp();
+  const { state, dispatch, activeClient } = useApp();
+  const { loadAvailablePeriods, refreshData } = useDbProxy();
   const { selectedPeriod, availablePeriods } = state;
 
   // Group periods by year
@@ -26,24 +29,41 @@ export function PeriodSelector() {
   const handleYearChange = (year: string) => {
     const monthsForYear = periodsByYear[year];
     if (monthsForYear && monthsForYear.length > 0) {
+      const nextPeriod = { year, month: monthsForYear[0] };
       dispatch({
         type: 'SET_SELECTED_PERIOD',
-        payload: { year, month: monthsForYear[0] }
+        payload: nextPeriod
       });
+      if (activeClient?.gstin) {
+        refreshData(activeClient.gstin, nextPeriod.year, nextPeriod.month);
+      }
     }
   };
 
   const handleMonthChange = (month: string) => {
     if (selectedPeriod) {
+      const nextPeriod = { year: selectedPeriod.year, month };
       dispatch({
         type: 'SET_SELECTED_PERIOD',
-        payload: { year: selectedPeriod.year, month }
+        payload: nextPeriod
       });
+      if (activeClient?.gstin) {
+        refreshData(activeClient.gstin, nextPeriod.year, nextPeriod.month);
+      }
     }
   };
 
   if (availablePeriods.length === 0) {
-    return null;
+    return (
+      <Button
+        size="sm"
+        variant="outline"
+        className="h-8"
+        onClick={() => activeClient?.gstin && loadAvailablePeriods(activeClient.gstin)}
+      >
+        Load Periods
+      </Button>
+    );
   }
 
   return (

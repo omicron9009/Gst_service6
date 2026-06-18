@@ -12,13 +12,16 @@ from ...core.base import (
     ClientForeignKeyMixin,
     FetchedUpdatedMixin,
     MonthlyPeriodMixin,
+    StatusCodeMixin,
     UpstreamStatusCodeMixin,
+    jsonb_array_default,
 )
 
 
 class _Gstr2BBase(
     BigIntPrimaryKeyMixin,
     ClientForeignKeyMixin,
+    StatusCodeMixin,
     UpstreamStatusCodeMixin,
     FetchedUpdatedMixin,
     Base,
@@ -70,6 +73,12 @@ class Gstr2B(_Gstr2BBase, MonthlyPeriodMixin):
     cdnra: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, nullable=True)
     isd: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, nullable=True)
     grand_summary: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, nullable=True)
+    records: Mapped[list[Any]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=list,
+        server_default=jsonb_array_default(),
+    )
 
 
 class Gstr2BRegenStatus(_Gstr2BBase):
